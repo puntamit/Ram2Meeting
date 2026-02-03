@@ -17,7 +17,8 @@ import {
     Home,
     Laptop,
     X,
-    DoorOpen
+    DoorOpen,
+    Search
 } from 'lucide-react'
 import { format, isPast } from 'date-fns'
 
@@ -50,6 +51,8 @@ export default function Bookings() {
     const [confirmCancel, setConfirmCancel] = useState(null)
     const [errorMsg, setErrorMsg] = useState(null)
     const [viewingBooking, setViewingBooking] = useState(null)
+    const [searchTerm, setSearchTerm] = useState('')
+    const [statusFilter, setStatusFilter] = useState('all')
 
     // Helper to check if a booking is expired based on its end time
     const isBookingExpired = (endTime) => isPast(new Date(endTime))
@@ -119,6 +122,20 @@ export default function Bookings() {
         }
     }
 
+    const filteredBookings = bookings.filter(booking => {
+        const titleMatch = booking.title?.toLowerCase().includes(searchTerm.toLowerCase())
+        const roomMatch = booking.rooms?.name?.toLowerCase().includes(searchTerm.toLowerCase())
+        const nameMatch = booking.requester_name?.toLowerCase().includes(searchTerm.toLowerCase())
+
+        const matchesSearch = titleMatch || roomMatch || nameMatch
+
+        const isExpired = isPast(new Date(booking.end_time)) && booking.status === 'booked'
+        const currentStatus = isExpired ? 'completed' : booking.status
+        const matchesStatus = statusFilter === 'all' || currentStatus === statusFilter
+
+        return matchesSearch && matchesStatus
+    })
+
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
@@ -134,23 +151,58 @@ export default function Bookings() {
                 </div>
             </div>
 
+            {/* Filter Section */}
+            <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-4 rounded-2xl border border-slate-200">
+                <div className="relative flex-1 w-full max-w-md">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center pointer-events-none text-slate-400">
+                        <Search size={18} />
+                    </div>
+                    <input
+                        type="text"
+                        placeholder="ค้นหาชื่อการประชุม, ห้อง, หรือชื่อผู้จอง..."
+                        className="w-full pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-primary-100 focus:border-primary-500 transition-all outline-none text-sm"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
+                <div className="flex bg-slate-100 p-1 rounded-xl w-full md:w-auto">
+                    {[
+                        { id: 'all', label: 'ทั้งหมด' },
+                        { id: 'booked', label: 'รอใช้งาน' },
+                        { id: 'completed', label: 'สำเร็จ' },
+                        { id: 'cancelled', label: 'ยกเลิก' },
+                    ].map(tab => (
+                        <button
+                            key={tab.id}
+                            onClick={() => setStatusFilter(tab.id)}
+                            className={`flex-1 md:flex-none px-4 py-2 text-xs font-bold rounded-lg transition-all ${statusFilter === tab.id
+                                ? 'bg-white text-primary-600 shadow-sm'
+                                : 'text-slate-500 hover:text-slate-700'
+                                }`}
+                        >
+                            {tab.label}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
             {loading ? (
                 <div className="space-y-4">
                     {[1, 2, 3].map(i => (
                         <div key={i} className="h-40 bg-slate-200 animate-pulse rounded-2xl" />
                     ))}
                 </div>
-            ) : bookings.length === 0 ? (
+            ) : filteredBookings.length === 0 ? (
                 <div className="bg-white border rounded-3xl p-16 text-center">
                     <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6">
                         <Calendar className="text-slate-300" size={40} />
                     </div>
-                    <h3 className="text-xl font-bold text-slate-900 mb-2">ยังไม่มีประวัติการจอง</h3>
-                    <p className="text-slate-500 max-w-sm mx-auto">ยังไม่มีรายการจองห้องประชุมในขณะนี้</p>
+                    <h3 className="text-xl font-bold text-slate-900 mb-2">ไม่พบรายการที่ค้นหา</h3>
+                    <p className="text-slate-500 max-w-sm mx-auto">ลองเปลี่ยนคำค้นหาหรือตัวกรองสถานะดูนะครับ</p>
                 </div>
             ) : (
                 <div className="space-y-4">
-                    {bookings.map((booking) => (
+                    {filteredBookings.map((booking) => (
                         <div key={booking.id} className="bg-white rounded-2xl border border-slate-200 p-6 flex flex-col md:flex-row gap-6 relative group overflow-hidden shadow-sm hover:shadow-md transition-shadow">
                             {/* Type Indicator */}
                             <div className="w-2 md:w-1 absolute inset-y-0 left-0 bg-primary-600" />
