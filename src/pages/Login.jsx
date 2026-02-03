@@ -103,10 +103,7 @@ export default function Login() {
                         </div>
 
                         <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                                <label className="text-sm font-semibold text-slate-700" htmlFor="password">รหัสผ่าน</label>
-                                <a href="#" className="text-xs font-semibold text-primary-600 hover:text-primary-700">ลืมรหัสผ่าน?</a>
-                            </div>
+                            <label className="text-sm font-semibold text-slate-700" htmlFor="password">รหัสผ่าน</label>
                             <div className="relative group">
                                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-primary-600 transition-colors">
                                     <Lock size={18} />
@@ -138,25 +135,8 @@ export default function Login() {
                             )}
                         </button>
 
-                        <div className="relative">
-                            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100" /></div>
-                            <div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-2 text-slate-400">ข้อมูลทดสอบ</span></div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4 text-xs">
-                            <button
-                                type="button"
-                                onClick={() => { setEmail('admin@test.com'); setPassword('password123'); }}
-                                className="p-3 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors text-slate-600 font-medium"
-                            >
-                                สำหรับ Admin
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => { setEmail('user@test.com'); setPassword('password123'); }}
-                                className="p-3 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors text-slate-600 font-medium"
-                            >
-                                สำหรับ User
-                            </button>
+                        <div className="text-center">
+                            <a href="#" className="text-sm font-medium text-slate-500 hover:text-primary-600 transition-colors">ลืมรหัสผ่าน?</a>
                         </div>
 
                         <p className="text-center text-sm text-slate-500 pt-4">
