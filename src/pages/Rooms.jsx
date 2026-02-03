@@ -479,8 +479,8 @@ export default function Rooms() {
                                                 </div>
 
                                                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
-                                                    {Array.from({ length: 11 }).map((_, i) => {
-                                                        const hour = i + 8; // Start from 8:00
+                                                    {Array.from({ length: 14 }).map((_, i) => {
+                                                        const hour = i + 6; // Start from 6:00
                                                         const timeSlot = `${hour.toString().padStart(2, '0')}:00`;
                                                         const nextSlot = `${(hour + 1).toString().padStart(2, '0')}:00`;
                                                         const slotDate = new Date(`${bookingForm.date}T${timeSlot}`);
