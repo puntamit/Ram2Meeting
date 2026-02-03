@@ -58,7 +58,6 @@ export default function Signup() {
                         <div className="w-12 h-12 bg-white/20 backdrop-blur-lg rounded-xl flex items-center justify-center border border-white/30">
                             <CalendarCheck size={28} />
                         </div>
-                        <h1 className="text-2xl font-bold tracking-tight">MeetBook</h1>
                     </div>
                 </div>
 
@@ -73,7 +72,7 @@ export default function Signup() {
                 </div>
 
                 <div className="relative z-10 flex gap-12 text-primary-200 text-sm font-medium">
-                    <p>© 2024 MeetBook Inc.</p>
+                    <p>© 2024</p>
                     <a href="#" className="hover:text-white transition-colors">นโยบายความเป็นส่วนตัว</a>
                     <a href="#" className="hover:text-white transition-colors">ช่วยเหลือ</a>
                 </div>
@@ -86,7 +85,6 @@ export default function Signup() {
                         <div className="w-16 h-16 bg-primary-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-primary-100 mx-auto mb-4">
                             <CalendarCheck size={32} />
                         </div>
-                        <h1 className="text-3xl font-bold text-slate-900">MeetBook</h1>
                     </div>
 
                     <div>
@@ -104,7 +102,7 @@ export default function Signup() {
                         <div className="space-y-2">
                             <label className="text-sm font-semibold text-slate-700" htmlFor="fullName">ชื่อ-นามสกุล</label>
                             <div className="relative group">
-                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-primary-600 transition-colors">
+                                <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center pointer-events-none text-slate-400 group-focus-within:text-primary-600 transition-colors">
                                     <UserIcon size={18} />
                                 </div>
                                 <input
@@ -122,7 +120,7 @@ export default function Signup() {
                         <div className="space-y-2">
                             <label className="text-sm font-semibold text-slate-700" htmlFor="email">อีเมล</label>
                             <div className="relative group">
-                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-primary-600 transition-colors">
+                                <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center pointer-events-none text-slate-400 group-focus-within:text-primary-600 transition-colors">
                                     <Mail size={18} />
                                 </div>
                                 <input
@@ -141,7 +139,7 @@ export default function Signup() {
                             <div className="space-y-2">
                                 <label className="text-sm font-semibold text-slate-700" htmlFor="department">แผนก</label>
                                 <div className="relative group">
-                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-primary-600 transition-colors">
+                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center pointer-events-none text-slate-400 group-focus-within:text-primary-600 transition-colors">
                                         <Building2 size={16} />
                                     </div>
                                     <input
@@ -157,7 +155,7 @@ export default function Signup() {
                             <div className="space-y-2">
                                 <label className="text-sm font-semibold text-slate-700" htmlFor="phone">เบอร์โทรศัพท์</label>
                                 <div className="relative group">
-                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-primary-600 transition-colors">
+                                    <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center pointer-events-none text-slate-400 group-focus-within:text-primary-600 transition-colors">
                                         <Phone size={16} />
                                     </div>
                                     <input
@@ -175,7 +173,7 @@ export default function Signup() {
                         <div className="space-y-2">
                             <label className="text-sm font-semibold text-slate-700" htmlFor="password">รหัสผ่าน</label>
                             <div className="relative group">
-                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-primary-600 transition-colors">
+                                <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center pointer-events-none text-slate-400 group-focus-within:text-primary-600 transition-colors">
                                     <Lock size={18} />
                                 </div>
                                 <input

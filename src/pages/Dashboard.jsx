@@ -13,17 +13,29 @@ import {
 import { format } from 'date-fns'
 import { Link } from 'react-router-dom'
 
-const StatCard = ({ icon: Icon, label, value, color }) => (
-    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-        <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white ${color}`}>
-            <Icon size={24} />
+const StatCard = ({ icon: Icon, label, value, color, to }) => {
+    const content = (
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 h-full">
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white shrink-0 ${color}`}>
+                <Icon size={24} />
+            </div>
+            <div className="min-w-0">
+                <p className="text-sm font-medium text-slate-500 truncate">{label}</p>
+                <p className="text-2xl font-bold text-slate-900">{value}</p>
+            </div>
         </div>
-        <div>
-            <p className="text-sm font-medium text-slate-500">{label}</p>
-            <p className="text-2xl font-bold text-slate-900">{value}</p>
-        </div>
-    </div>
-)
+    )
+
+    if (to) {
+        return (
+            <Link to={to} className="block transition-transform hover:scale-[1.02] active:scale-[0.98]">
+                {content}
+            </Link>
+        )
+    }
+
+    return content
+}
 
 export default function Dashboard() {
     const { user, isAdmin } = useAuth()
@@ -39,10 +51,17 @@ export default function Dashboard() {
         try {
             setLoading(true)
 
+            const today = new Date().toISOString().split('T')[0]
+            const todayStart = `${today}T00:00:00.000Z`
+            const todayEnd = `${today}T23:59:59.999Z`
+
             const [roomsCount, bookingsCount, todayCount, upcomingData] = await Promise.all([
                 supabase.from('rooms').select('*', { count: 'exact', head: true }),
                 supabase.from('bookings').select('*', { count: 'exact', head: true }),
-                supabase.from('bookings').select('*', { count: 'exact', head: true }).gte('start_time', new Date().toISOString().split('T')[0]),
+                supabase.from('bookings')
+                    .select('*', { count: 'exact', head: true })
+                    .gte('start_time', todayStart)
+                    .lte('start_time', todayEnd),
                 supabase.from('bookings')
                     .select('*, rooms(name)')
                     .gte('start_time', new Date().toISOString())
@@ -72,18 +91,21 @@ export default function Dashboard() {
                     label="ห้องทั้งหมด"
                     value={stats.rooms}
                     color="bg-primary-600 shadow-lg shadow-primary-100"
+                    to="/rooms"
                 />
                 <StatCard
                     icon={CalendarClock}
                     label="การจองทั้งหมด"
                     value={stats.bookings}
                     color="bg-amber-500 shadow-lg shadow-amber-100"
+                    to="/bookings"
                 />
                 <StatCard
                     icon={CheckCircle2}
                     label="ประชุมวันนี้"
                     value={stats.today}
                     color="bg-emerald-500 shadow-lg shadow-emerald-100"
+                    to="/bookings"
                 />
             </div>
 
