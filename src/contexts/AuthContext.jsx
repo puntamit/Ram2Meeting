@@ -62,9 +62,13 @@ export const AuthProvider = ({ children }) => {
         }
     })
     const signOut = () => supabase.auth.signOut()
-    const resetPassword = (email) => supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
-    })
+    const resetPassword = (email) => {
+        // Use Site URL from env if provided (useful for forcing Netlify URL), otherwise use current origin
+        const siteUrl = import.meta.env.VITE_SITE_URL || window.location.origin
+        return supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: `${siteUrl}/reset-password`,
+        })
+    }
     const updatePassword = (newPassword) => supabase.auth.updateUser({ password: newPassword })
 
     const value = {
