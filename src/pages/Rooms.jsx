@@ -636,7 +636,7 @@ export default function Rooms() {
                                         </div>
                                     </div>
 
-                                    <div className="space-y-2">
+                                    <div className="md:col-span-2 space-y-2">
                                         <label className="text-sm font-semibold text-slate-700">Link ประชุม (ถ้ามี)</label>
                                         <div className="relative">
                                             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
