@@ -136,11 +136,6 @@ export default function Login() {
                         <div className="text-center">
                             <a href="#" className="text-sm font-medium text-slate-500 hover:text-primary-600 transition-colors">ลืมรหัสผ่าน?</a>
                         </div>
-
-                        <p className="text-center text-sm text-slate-500 pt-4">
-                            ยังไม่มีบัญชีผู้ใช้?{' '}
-                            <Link to="/signup" className="text-primary-600 font-bold hover:text-primary-700">สมัครสมาชิก</Link>
-                        </p>
                     </form>
                 </div>
             </div>

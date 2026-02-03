@@ -9,7 +9,9 @@ import {
     LogOut,
     Menu,
     X,
-    User as UserIcon
+    User as UserIcon,
+    ChevronRight,
+    Users
 } from 'lucide-react'
 import { useState } from 'react'
 import { clsx } from 'clsx'
@@ -59,6 +61,7 @@ export default function Layout() {
 
     const adminItems = [
         { to: '/admin/rooms', icon: SettingsIcon, label: 'จัดการห้องประชุม' },
+        { to: '/admin/users', icon: Users, label: 'จัดการสมาชิก' },
         { to: '/admin/logs', icon: History, label: 'ประวัติการใช้งาน (Logs)' },
     ]
 

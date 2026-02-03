@@ -8,6 +8,7 @@ import Rooms from './pages/Rooms'
 import Bookings from './pages/Bookings'
 import AdminRooms from './pages/AdminRooms'
 import AdminLogs from './pages/AdminLogs'
+import AdminUsers from './pages/AdminUsers'
 
 function ProtectedRoute({ children, adminOnly = false }) {
     const { user, profile, loading, isAdmin } = useAuth()
@@ -30,7 +31,6 @@ function App() {
             <AuthProvider>
                 <Routes>
                     <Route path="/login" element={<Login />} />
-                    <Route path="/signup" element={<Signup />} />
 
                     <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
                         <Route index element={<Dashboard />} />
@@ -40,6 +40,7 @@ function App() {
                         {/* Admin Routes */}
                         <Route path="admin/rooms" element={<ProtectedRoute adminOnly><AdminRooms /></ProtectedRoute>} />
                         <Route path="admin/logs" element={<ProtectedRoute adminOnly><AdminLogs /></ProtectedRoute>} />
+                        <Route path="admin/users" element={<ProtectedRoute adminOnly><AdminUsers /></ProtectedRoute>} />
                     </Route>
                 </Routes>
             </AuthProvider>
