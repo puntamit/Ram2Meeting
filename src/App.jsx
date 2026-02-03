@@ -9,6 +9,8 @@ import Bookings from './pages/Bookings'
 import AdminRooms from './pages/AdminRooms'
 import AdminLogs from './pages/AdminLogs'
 import AdminUsers from './pages/AdminUsers'
+import ForgotPassword from './pages/ForgotPassword'
+import ResetPassword from './pages/ResetPassword'
 
 function ProtectedRoute({ children, adminOnly = false }) {
     const { user, profile, loading, isAdmin } = useAuth()
@@ -31,7 +33,8 @@ function App() {
             <AuthProvider>
                 <Routes>
                     <Route path="/login" element={<Login />} />
-
+                    <Route path="/forgot-password" element={<ForgotPassword />} />
+                    <Route path="/reset-password" element={<ResetPassword />} />
                     <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
                         <Route index element={<Dashboard />} />
                         <Route path="rooms" element={<Rooms />} />

@@ -134,7 +134,7 @@ export default function Login() {
                         </button>
 
                         <div className="text-center">
-                            <a href="#" className="text-sm font-medium text-slate-500 hover:text-primary-600 transition-colors">ลืมรหัสผ่าน?</a>
+                            <Link to="/forgot-password" size="sm" className="text-sm font-medium text-slate-500 hover:text-primary-600 transition-colors">ลืมรหัสผ่าน?</Link>
                         </div>
                     </form>
                 </div>
