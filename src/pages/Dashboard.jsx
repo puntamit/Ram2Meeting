@@ -65,15 +65,14 @@ export default function Dashboard() {
                 .lte('start_time', todayEnd)
 
             let upcomingQuery = supabase.from('bookings').select('*, rooms(name)')
-                .gte('start_time', new Date().toISOString())
+                .gte('start_time', todayStart)
+                .lte('start_time', todayEnd)
                 .order('start_time', { ascending: true })
-                .limit(5)
 
             let bookingsCountQuery = supabase.from('bookings').select('*', { count: 'exact', head: true })
 
             if (!isAdmin) {
                 todayQuery = todayQuery.eq('user_id', user.id)
-                upcomingQuery = upcomingQuery.eq('user_id', user.id)
                 bookingsCountQuery = bookingsCountQuery.eq('user_id', user.id)
             }
 
@@ -132,7 +131,7 @@ export default function Dashboard() {
                 {/* Upcoming Meetings */}
                 <div className="lg:col-span-2 space-y-4">
                     <div className="flex items-center justify-between">
-                        <h3 className="text-xl font-bold text-slate-900">การประชุมที่กำลังจะถึง</h3>
+                        <h3 className="text-xl font-bold text-slate-900">รายการประชุมวันนี้</h3>
                         <Link to="/bookings" className="text-sm font-semibold text-primary-600 hover:text-primary-700">ดูทั้งหมด</Link>
                     </div>
 
@@ -144,7 +143,7 @@ export default function Dashboard() {
                                 <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
                                     <CalendarClock className="text-slate-300" size={32} />
                                 </div>
-                                <p className="text-slate-500 font-medium">ยังไม่มีการประชุมที่ถูกจองไว้</p>
+                                <p className="text-slate-500 font-medium">ยังไม่มีรายการประชุมในวันนี้</p>
                                 <Link to="/rooms" className="text-primary-600 font-semibold text-sm mt-2 inline-block">จองห้องประชุมตอนนี้</Link>
                             </div>
                         ) : (
