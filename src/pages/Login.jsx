@@ -38,7 +38,7 @@ export default function Login() {
 
                 <div className="relative z-10">
                     <div className="flex items-center gap-3">
-                        <img src="/images/Ram2Logo.png" alt="Logo" className="h-16 w-auto" />
+                        <img src="/images/Ram2Logo.png" alt="Logo" className="h-24 w-auto" />
                     </div>
                 </div>
 
@@ -63,7 +63,7 @@ export default function Login() {
             <div className="flex items-center justify-center p-8 bg-white">
                 <div className="w-full max-w-md space-y-8">
                     <div className="lg:hidden text-center mb-12">
-                        <img src="/images/Ram2Logo.png" alt="Logo" className="h-16 w-auto mx-auto mb-4" />
+                        <img src="/images/Ram2Logo.png" alt="Logo" className="h-24 w-auto mx-auto mb-4" />
                     </div>
 
                     <div>
