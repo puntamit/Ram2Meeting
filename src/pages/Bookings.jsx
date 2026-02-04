@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import ConfirmModal from '../components/ConfirmModal'
@@ -17,9 +17,14 @@ import {
     Home,
     Laptop,
     X,
-    DoorOpen
+    DoorOpen,
+    Search,
+    ArrowDownAz,
+    ArrowUpAz,
+    Mail
 } from 'lucide-react'
 import { format, isPast } from 'date-fns'
+import { formatThaiDate } from '../lib/utils'
 
 const StatusBadge = ({ status, endTime }) => {
     const isExpired = isPast(new Date(endTime)) && status === 'booked'
@@ -45,18 +50,23 @@ const StatusBadge = ({ status, endTime }) => {
 
 export default function Bookings() {
     const { user, isAdmin } = useAuth()
+    const location = useLocation()
     const [bookings, setBookings] = useState([])
     const [loading, setLoading] = useState(true)
     const [confirmCancel, setConfirmCancel] = useState(null)
     const [errorMsg, setErrorMsg] = useState(null)
     const [viewingBooking, setViewingBooking] = useState(null)
+    const [searchTerm, setSearchTerm] = useState('')
+    const [statusFilter, setStatusFilter] = useState('all')
+    const [sortOrder, setSortOrder] = useState('desc')
+    const [dateFilter, setDateFilter] = useState(location.state?.filterDate || '')
 
     // Helper to check if a booking is expired based on its end time
     const isBookingExpired = (endTime) => isPast(new Date(endTime))
 
     useEffect(() => {
         if (user) fetchUserBookings()
-    }, [user])
+    }, [user, sortOrder])
 
     const fetchUserBookings = async () => {
         try {
@@ -64,7 +74,7 @@ export default function Bookings() {
             let query = supabase
                 .from('bookings')
                 .select('*, rooms(name, building, floor)')
-                .order('start_time', { ascending: false })
+                .order('start_time', { ascending: sortOrder === 'asc' })
 
             // If not admin, only show own bookings
             if (!isAdmin) {
@@ -119,6 +129,23 @@ export default function Bookings() {
         }
     }
 
+    const filteredBookings = bookings.filter(booking => {
+        const titleMatch = booking.title?.toLowerCase().includes(searchTerm.toLowerCase())
+        const roomMatch = booking.rooms?.name?.toLowerCase().includes(searchTerm.toLowerCase())
+        const nameMatch = booking.requester_name?.toLowerCase().includes(searchTerm.toLowerCase())
+
+        const matchesSearch = titleMatch || roomMatch || nameMatch
+
+        const isExpired = isPast(new Date(booking.end_time)) && booking.status === 'booked'
+        const currentStatus = isExpired ? 'completed' : booking.status
+        const matchesStatus = statusFilter === 'all' || currentStatus === statusFilter
+
+        const bookingDate = format(new Date(booking.start_time), 'yyyy-MM-dd')
+        const matchesDate = !dateFilter || bookingDate === dateFilter
+
+        return matchesSearch && matchesStatus && matchesDate
+    })
+
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
@@ -134,23 +161,101 @@ export default function Bookings() {
                 </div>
             </div>
 
+            {/* Filter Section */}
+            <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-4 rounded-2xl border border-slate-200">
+                <div className="relative flex-1 w-full max-w-md">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center pointer-events-none text-slate-400">
+                        <Search size={18} />
+                    </div>
+                    <input
+                        type="text"
+                        placeholder="ค้นหาชื่อการประชุม, ห้อง, หรือชื่อผู้จอง..."
+                        className="w-full pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-primary-100 focus:border-primary-500 transition-all outline-none text-sm"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
+
+                <div className="relative w-full md:w-auto">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center pointer-events-none text-slate-400">
+                        <Calendar size={18} />
+                    </div>
+                    <input
+                        type="date"
+                        className="w-full pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-primary-100 focus:border-primary-500 transition-all outline-none text-sm text-slate-600"
+                        value={dateFilter}
+                        onChange={(e) => setDateFilter(e.target.value)}
+                    />
+                    {dateFilter && (
+                        <button
+                            onClick={() => setDateFilter('')}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                        >
+                            <X size={14} />
+                        </button>
+                    )}
+                </div>
+
+                <div className="flex bg-slate-100 p-1 rounded-xl w-full md:w-auto overflow-x-auto no-scrollbar">
+                    {[
+                        { id: 'all', label: 'ทั้งหมด' },
+                        { id: 'booked', label: 'รอใช้งาน' },
+                        { id: 'completed', label: 'สำเร็จ' },
+                        { id: 'cancelled', label: 'ยกเลิก' },
+                    ].map(tab => (
+                        <button
+                            key={tab.id}
+                            onClick={() => setStatusFilter(tab.id)}
+                            className={`flex-1 md:flex-none whitespace-nowrap px-4 py-2 text-xs font-bold rounded-lg transition-all ${statusFilter === tab.id
+                                ? 'bg-white text-primary-600 shadow-sm'
+                                : 'text-slate-500 hover:text-slate-700'
+                                }`}
+                        >
+                            {tab.label}
+                        </button>
+                    ))}
+                </div>
+                <div className="flex bg-slate-100 p-1 rounded-xl w-full md:w-auto">
+                    <button
+                        onClick={() => setSortOrder('desc')}
+                        className={`flex-1 md:flex-none flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition-all ${sortOrder === 'desc'
+                            ? 'bg-white text-primary-600 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-700'
+                            }`}
+                    >
+                        <ArrowDownAz size={16} />
+                        ล่าสุด
+                    </button>
+                    <button
+                        onClick={() => setSortOrder('asc')}
+                        className={`flex-1 md:flex-none flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition-all ${sortOrder === 'asc'
+                            ? 'bg-white text-primary-600 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-700'
+                            }`}
+                    >
+                        <ArrowUpAz size={16} />
+                        เก่าสุด
+                    </button>
+                </div>
+            </div>
+
             {loading ? (
                 <div className="space-y-4">
                     {[1, 2, 3].map(i => (
                         <div key={i} className="h-40 bg-slate-200 animate-pulse rounded-2xl" />
                     ))}
                 </div>
-            ) : bookings.length === 0 ? (
+            ) : filteredBookings.length === 0 ? (
                 <div className="bg-white border rounded-3xl p-16 text-center">
                     <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6">
                         <Calendar className="text-slate-300" size={40} />
                     </div>
-                    <h3 className="text-xl font-bold text-slate-900 mb-2">ยังไม่มีประวัติการจอง</h3>
-                    <p className="text-slate-500 max-w-sm mx-auto">ยังไม่มีรายการจองห้องประชุมในขณะนี้</p>
+                    <h3 className="text-xl font-bold text-slate-900 mb-2">ไม่พบรายการที่ค้นหา</h3>
+                    <p className="text-slate-500 max-w-sm mx-auto">ลองเปลี่ยนคำค้นหาหรือตัวกรองสถานะดูนะครับ</p>
                 </div>
             ) : (
                 <div className="space-y-4">
-                    {bookings.map((booking) => (
+                    {filteredBookings.map((booking) => (
                         <div key={booking.id} className="bg-white rounded-2xl border border-slate-200 p-6 flex flex-col md:flex-row gap-6 relative group overflow-hidden shadow-sm hover:shadow-md transition-shadow">
                             {/* Type Indicator */}
                             <div className="w-2 md:w-1 absolute inset-y-0 left-0 bg-primary-600" />
@@ -161,9 +266,16 @@ export default function Bookings() {
                                         <div className="flex items-center gap-2">
                                             <h3 className="text-xl font-bold text-slate-900">{booking.title}</h3>
                                             {isAdmin && booking.requester_name && (
-                                                <span className="text-xs font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
-                                                    โดย: {booking.requester_name}
-                                                </span>
+                                                <div className="flex flex-col">
+                                                    <span className="text-xs font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full inline-block">
+                                                        โดย: {booking.requester_name}
+                                                    </span>
+                                                    {booking.profiles?.email && (
+                                                        <span className="text-[10px] text-slate-400 flex items-center gap-1 ml-2 mt-0.5">
+                                                            <Mail size={10} /> {booking.profiles.email}
+                                                        </span>
+                                                    )}
+                                                </div>
                                             )}
                                         </div>
                                         <div className="flex items-center gap-4 text-sm text-slate-500 font-medium">
@@ -186,7 +298,7 @@ export default function Bookings() {
                                     )}
                                     <div className="flex flex-col">
                                         <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">วันที่</span>
-                                        <span className="text-sm font-semibold text-slate-700">{format(new Date(booking.start_time), 'd MMM yyyy')}</span>
+                                        <span className="text-sm font-semibold text-slate-700">{formatThaiDate(booking.start_time, 'd MMM yyyy')}</span>
                                     </div>
                                     <div className="flex flex-col">
                                         <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">รูปแบบ</span>
@@ -288,7 +400,7 @@ export default function Bookings() {
                                 <div className="grid grid-cols-2 gap-6">
                                     <div className="space-y-1">
                                         <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">วันที่</span>
-                                        <p className="text-slate-700 font-bold">{format(new Date(viewingBooking.start_time), 'd MMMM yyyy')}</p>
+                                        <p className="text-slate-700 font-bold">{formatThaiDate(viewingBooking.start_time, 'd MMMM yyyy')}</p>
                                     </div>
                                     <div className="space-y-1">
                                         <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">เวลา</span>

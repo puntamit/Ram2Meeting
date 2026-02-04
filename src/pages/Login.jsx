@@ -38,19 +38,17 @@ export default function Login() {
 
                 <div className="relative z-10">
                     <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 bg-white/20 backdrop-blur-lg rounded-xl flex items-center justify-center border border-white/30">
-                            <CalendarCheck size={28} />
-                        </div>
+                        <img src="/images/Ram2Logo.png" alt="Logo" className="h-24 w-auto" />
                     </div>
                 </div>
 
                 <div className="relative z-10">
                     <h2 className="text-5xl font-bold leading-tight mb-6">
-                        พื้นที่อัจฉริยะแด่ <br />
-                        <span className="text-primary-200">ทีมที่ยอดเยี่ยม</span>
+                        ระบบจองห้องประชุม <br />
+                        <span className="text-primary-200">โรงพยาบาลรามคำแหง 2</span>
                     </h2>
                     <p className="text-primary-100 text-lg max-w-md">
-                        วิธีที่ง่ายที่สุดในการจองห้องประชุม จัดการพื้นที่ Hybrid และเพิ่มประสิทธิภาพการทำงานในออฟฟิศของคุณ
+                        นวัตกรรมการจัดการพื้นที่ประชุม เพื่อการประสานงานที่มีประสิทธิภาพและรวดเร็วสำหรับบุคลากร RAM2 Hospital ทุกคน
                     </p>
                 </div>
 
@@ -65,9 +63,7 @@ export default function Login() {
             <div className="flex items-center justify-center p-8 bg-white">
                 <div className="w-full max-w-md space-y-8">
                     <div className="lg:hidden text-center mb-12">
-                        <div className="w-16 h-16 bg-primary-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-primary-100 mx-auto mb-4">
-                            <CalendarCheck size={32} />
-                        </div>
+                        <img src="/images/Ram2Logo.png" alt="Logo" className="h-24 w-auto mx-auto mb-4" />
                     </div>
 
                     <div>

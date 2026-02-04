@@ -12,6 +12,7 @@ import {
     Filter
 } from 'lucide-react'
 import { format } from 'date-fns'
+import { formatThaiDate } from '../lib/utils'
 
 export default function AdminLogs() {
     const [logs, setLogs] = useState([])
@@ -97,7 +98,7 @@ export default function AdminLogs() {
                                     <tr key={log.id} className="hover:bg-slate-50 transition-colors group">
                                         <td className="px-6 py-4">
                                             <div className="flex flex-col">
-                                                <span className="text-sm font-bold text-slate-700">{format(new Date(log.created_at), 'MMM dd, yyyy')}</span>
+                                                <span className="text-sm font-bold text-slate-700">{formatThaiDate(log.created_at, 'd MMM yyyy')}</span>
                                                 <span className="text-xs text-slate-400">{format(new Date(log.created_at), 'HH:mm:ss')}</span>
                                             </div>
                                         </td>

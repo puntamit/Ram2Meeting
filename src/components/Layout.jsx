@@ -5,15 +5,16 @@ import {
     DoorOpen,
     CalendarCheck,
     Settings as SettingsIcon,
-    History,
     LogOut,
     Menu,
     X,
     User as UserIcon,
     ChevronRight,
-    Users
+    Users,
+    Key,
+    ShieldAlert
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import ConfirmModal from './ConfirmModal'
@@ -43,6 +44,45 @@ export default function Layout() {
     const navigate = useNavigate()
     const [isSidebarOpen, setSidebarOpen] = useState(false)
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
+    const [showFirstLoginModal, setShowFirstLoginModal] = useState(false)
+    const [updatePasswordData, setUpdatePasswordData] = useState({ new: '', confirm: '', loading: false, error: null, success: false })
+
+    const { updatePassword, dismissFirstLogin } = useAuth()
+
+    useEffect(() => {
+        if (profile?.must_change_password) {
+            setShowFirstLoginModal(true)
+        }
+    }, [profile])
+
+    const handleChangePassword = async (e) => {
+        e.preventDefault()
+        if (updatePasswordData.new !== updatePasswordData.confirm) {
+            setUpdatePasswordData({ ...updatePasswordData, error: 'รหัสผ่านไม่ตรงกัน' })
+            return
+        }
+        if (updatePasswordData.new.length < 6) {
+            setUpdatePasswordData({ ...updatePasswordData, error: 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร' })
+            return
+        }
+
+        setUpdatePasswordData({ ...updatePasswordData, loading: true, error: null })
+        try {
+            const { error } = await updatePassword(updatePasswordData.new)
+            if (error) throw error
+
+            // After success, also dismiss the flag
+            await dismissFirstLogin()
+            setUpdatePasswordData({ ...updatePasswordData, success: true, loading: false })
+
+            // Auto close after 2 seconds
+            setTimeout(() => {
+                setShowFirstLoginModal(false)
+            }, 2000)
+        } catch (error) {
+            setUpdatePasswordData({ ...updatePasswordData, error: error.message, loading: false })
+        }
+    }
 
     const handleSignOut = async () => {
         setShowLogoutConfirm(true)
@@ -56,13 +96,12 @@ export default function Layout() {
     const menuItems = [
         { to: '/', icon: LayoutDashboard, label: 'แดชบอร์ด' },
         { to: '/rooms', icon: DoorOpen, label: 'ห้องประชุม' },
-        { to: '/bookings', icon: CalendarCheck, label: 'ประวัติการจอง' },
+        { to: '/bookings', icon: CalendarCheck, label: 'ประวัติการจองของฉัน' },
     ]
 
     const adminItems = [
         { to: '/admin/rooms', icon: SettingsIcon, label: 'จัดการห้องประชุม' },
         { to: '/admin/users', icon: Users, label: 'จัดการสมาชิก' },
-        { to: '/admin/logs', icon: History, label: 'ประวัติการใช้งาน (Logs)' },
     ]
 
     return (
@@ -182,6 +221,93 @@ export default function Layout() {
                 confirmText="ออกจากระบบ"
                 type="danger"
             />
+
+            {/* First Login Modal */}
+            {showFirstLoginModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
+                    <div className="relative bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
+                        {!updatePasswordData.success ? (
+                            <div className="p-8">
+                                <div className="w-16 h-16 bg-primary-100 text-primary-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                                    <ShieldAlert size={32} />
+                                </div>
+                                <h3 className="text-2xl font-bold text-slate-900 text-center mb-2">บังคับเปลี่ยนรหัสผ่าน</h3>
+                                <p className="text-slate-500 text-center mb-8">เพื่อความปลอดภัยอย่างสูงสุด สมาชิกทุกคนที่เข้าใช้งานครั้งแรกจำเป็นต้องตั้งรหัสผ่านใหม่เพื่อความเป็นส่วนตัวครับ</p>
+
+                                {!updatePasswordData.showForm ? (
+                                    <div className="space-y-3">
+                                        <button
+                                            onClick={() => setUpdatePasswordData({ ...updatePasswordData, showForm: true })}
+                                            className="w-full py-4 bg-primary-600 text-white font-bold rounded-2xl hover:bg-primary-700 transition-all shadow-lg shadow-primary-100 flex items-center justify-center gap-2"
+                                        >
+                                            <Key size={20} />
+                                            ตั้งรหัสผ่านใหม่ทันที
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <form onSubmit={handleChangePassword} className="space-y-4">
+                                        {updatePasswordData.error && (
+                                            <div className="p-3 bg-red-50 border border-red-100 text-red-600 rounded-xl text-xs font-bold animate-shake">
+                                                {updatePasswordData.error}
+                                            </div>
+                                        )}
+                                        <div className="space-y-1">
+                                            <label className="text-xs font-bold text-slate-500 uppercase">รหัสผ่านใหม่</label>
+                                            <input
+                                                required
+                                                type="password"
+                                                autoFocus
+                                                placeholder="อย่างน้อย 6 ตัวอักษร"
+                                                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-primary-100 focus:border-primary-500 transition-all outline-none font-mono"
+                                                value={updatePasswordData.new}
+                                                onChange={(e) => setUpdatePasswordData({ ...updatePasswordData, new: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-xs font-bold text-slate-500 uppercase">ยืนยันรหัสผ่านใหม่</label>
+                                            <input
+                                                required
+                                                type="password"
+                                                placeholder="พิมพ์รหัสผ่านอีกครั้ง"
+                                                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-primary-100 focus:border-primary-500 transition-all outline-none font-mono"
+                                                value={updatePasswordData.confirm}
+                                                onChange={(e) => setUpdatePasswordData({ ...updatePasswordData, confirm: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className="flex gap-3 pt-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => setUpdatePasswordData({ ...updatePasswordData, showForm: false })}
+                                                className="flex-1 py-4 bg-slate-50 text-slate-500 font-bold rounded-2xl hover:bg-slate-100 transition-all"
+                                            >
+                                                ย้อนกลับ
+                                            </button>
+                                            <button
+                                                type="submit"
+                                                disabled={updatePasswordData.loading}
+                                                className="flex-[2] py-4 bg-primary-600 text-white font-bold rounded-2xl hover:bg-primary-700 transition-all shadow-lg shadow-primary-100 flex items-center justify-center gap-2"
+                                            >
+                                                {updatePasswordData.loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'บันทึกรหัสใหม่'}
+                                            </button>
+                                        </div>
+                                    </form>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="p-12 text-center animate-in zoom-in duration-500">
+                                <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" className="w-10 h-10">
+                                        <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
+                                    </svg>
+                                </div>
+                                <h3 className="text-2xl font-bold text-slate-900 mb-2">เปลี่ยนสำเร็จ!</h3>
+                                <p className="text-slate-500">ใช้รหัสผ่านใหม่ในการเข้าสู่ระบบครั้งหน้าได้เลยครับ</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     )
 }
