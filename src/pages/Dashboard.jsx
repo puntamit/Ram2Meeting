@@ -160,6 +160,8 @@ export default function Dashboard() {
                                                 <div className="flex items-center gap-3 text-sm text-slate-500 mt-1">
                                                     <span className="flex items-center gap-1 font-medium"><DoorOpen size={14} /> {booking.rooms?.name}</span>
                                                     <span className="w-1 h-1 bg-slate-300 rounded-full" />
+                                                    <span className="font-medium text-slate-600">โดย: {booking.requester_name}</span>
+                                                    <span className="w-1 h-1 bg-slate-300 rounded-full" />
                                                     <span>{format(new Date(booking.start_time), 'HH:mm')} - {format(new Date(booking.end_time), 'HH:mm')}</span>
                                                 </div>
                                             </div>
