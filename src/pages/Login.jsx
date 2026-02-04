@@ -53,7 +53,7 @@ export default function Login() {
                 </div>
 
                 <div className="relative z-10 flex gap-12 text-primary-200 text-sm font-medium">
-                    <p>© 2024</p>
+                    <p>© 2026</p>
                     <a href="#" className="hover:text-white transition-colors">นโยบายความเป็นส่วนตัว</a>
                     <a href="#" className="hover:text-white transition-colors">ช่วยเหลือ</a>
                 </div>
@@ -88,7 +88,7 @@ export default function Login() {
                                     id="email"
                                     type="email"
                                     className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-primary-100 focus:border-primary-500 transition-all outline-none"
-                                    placeholder="name@company.com"
+                                    placeholder="กรุณากรอกอีเมล"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                     required
