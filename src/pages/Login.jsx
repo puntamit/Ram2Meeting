@@ -48,7 +48,7 @@ export default function Login() {
                         <span className="text-primary-200">โรงพยาบาลรามคำแหง 2</span>
                     </h2>
                     <p className="text-primary-100 text-lg max-w-md">
-                        นวัตกรรมการจัดการพื้นที่ประชุม เพื่อการประสานงานที่มีประสิทธิภาพและรวดเร็วสำหรับบุคลากร RAM2 Hospital ทุกคน
+                        นวัตกรรมการจัดการพื้นที่ประชุม เพื่อการประสานงานกับ ITสำหรับบุคลากร RAM2 Hospital
                     </p>
                 </div>
 
