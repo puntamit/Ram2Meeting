@@ -8,7 +8,15 @@ import {
     CheckCircle2,
     ExternalLink,
     Plus,
-    Settings as SettingsIcon
+    Settings as SettingsIcon,
+    Info,
+    MapPin,
+    Clock,
+    Video,
+    Home,
+    Laptop,
+    X,
+    Calendar
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { Link } from 'react-router-dom'
@@ -47,6 +55,7 @@ export default function Dashboard() {
     const [stats, setStats] = useState({ rooms: 0, bookings: 0, today: 0 })
     const [upcoming, setUpcoming] = useState([])
     const [loading, setLoading] = useState(true)
+    const [viewingBooking, setViewingBooking] = useState(null)
 
     useEffect(() => {
         fetchDashboardData()
@@ -148,36 +157,78 @@ export default function Dashboard() {
                             </div>
                         ) : (
                             <div className="divide-y divide-slate-100">
-                                {upcoming.map((booking) => (
-                                    <div key={booking.id} className="p-5 hover:bg-slate-50 transition-colors flex items-center justify-between group">
-                                        <div className="flex items-center gap-4">
-                                            <div className="flex flex-col items-center justify-center min-w-[64px] h-16 bg-primary-50 text-primary-700 rounded-xl">
-                                                <span className="text-xs font-bold uppercase">{formatThaiDate(booking.start_time, 'MMM')}</span>
-                                                <span className="text-xl font-black">{formatThaiDate(booking.start_time, 'dd')}</span>
-                                            </div>
-                                            <div>
-                                                <h4 className="font-bold text-slate-900 group-hover:text-primary-600 transition-colors">{booking.title}</h4>
-                                                <div className="flex items-center gap-3 text-sm text-slate-500 mt-1">
-                                                    <span className="flex items-center gap-1 font-medium"><DoorOpen size={14} /> {booking.rooms?.name}</span>
-                                                    <span className="w-1 h-1 bg-slate-300 rounded-full" />
-                                                    <span className="font-medium text-slate-600">โดย: {booking.requester_name}</span>
-                                                    <span className="w-1 h-1 bg-slate-300 rounded-full" />
-                                                    <span>{format(new Date(booking.start_time), 'HH:mm')} - {format(new Date(booking.end_time), 'HH:mm')}</span>
+                                {upcoming.map((booking) => {
+                                    const isMine = booking.user_id === user?.id
+                                    return (
+                                        <div
+                                            key={booking.id}
+                                            className={cn(
+                                                "p-5 transition-all flex items-center justify-between group relative border-l-4",
+                                                isMine
+                                                    ? "bg-primary-50/40 hover:bg-primary-50/60 border-l-primary-500"
+                                                    : "hover:bg-slate-50 border-l-transparent"
+                                            )}
+                                        >
+                                            <div className="flex items-center gap-4">
+                                                <div className={cn(
+                                                    "flex flex-col items-center justify-center min-w-[64px] h-16 rounded-xl transition-colors",
+                                                    isMine ? "bg-primary-600 text-white" : "bg-slate-100 text-slate-600"
+                                                )}>
+                                                    <span className="text-xs font-bold uppercase opacity-80">{formatThaiDate(booking.start_time, 'MMM')}</span>
+                                                    <span className="text-xl font-black">{formatThaiDate(booking.start_time, 'dd')}</span>
+                                                </div>
+                                                <div>
+                                                    <div className="flex items-center gap-2">
+                                                        <h4 className="font-bold text-slate-900 group-hover:text-primary-600 transition-colors">{booking.title}</h4>
+                                                        {isMine && (
+                                                            <span className="text-[10px] font-bold bg-primary-600 text-white px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm">ของคุณ</span>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex items-center gap-3 text-sm text-slate-500 mt-1">
+                                                        <span className="flex items-center gap-1 font-medium"><DoorOpen size={14} /> {booking.rooms?.name}</span>
+                                                        <span className="w-1 h-1 bg-slate-300 rounded-full" />
+                                                        <span className={cn(
+                                                            "font-medium",
+                                                            isMine ? "text-primary-700" : "text-slate-600"
+                                                        )}>โดย: {isMine ? 'คุณ' : booking.requester_name}</span>
+                                                        <span className="w-1 h-1 bg-slate-300 rounded-full" />
+                                                        <span>{format(new Date(booking.start_time), 'HH:mm')} - {format(new Date(booking.end_time), 'HH:mm')}</span>
+                                                    </div>
                                                 </div>
                                             </div>
+                                            <div className="flex items-center gap-2">
+                                                {booking.meeting_link && (
+                                                    <a
+                                                        href={booking.meeting_link}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className={cn(
+                                                            "p-2 rounded-lg transition-all border",
+                                                            isMine
+                                                                ? "bg-primary-600 text-white hover:bg-primary-700 border-transparent shadow-md"
+                                                                : "text-primary-600 hover:bg-primary-50 border-transparent hover:border-primary-100"
+                                                        )}
+                                                        title="เข้าร่วมประชุม"
+                                                    >
+                                                        <ExternalLink size={20} />
+                                                    </a>
+                                                )}
+                                                <button
+                                                    onClick={() => setViewingBooking(booking)}
+                                                    className={cn(
+                                                        "p-2 rounded-lg transition-all border",
+                                                        isMine
+                                                            ? "bg-white text-primary-600 hover:bg-primary-50 border-primary-200"
+                                                            : "text-slate-400 hover:text-primary-600 hover:bg-primary-50 border-transparent hover:border-primary-100"
+                                                    )}
+                                                    title="ดูรายละเอียด"
+                                                >
+                                                    <Info size={20} />
+                                                </button>
+                                            </div>
                                         </div>
-                                        {booking.meeting_link && (
-                                            <a
-                                                href={booking.meeting_link}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="p-2 text-primary-600 hover:bg-primary-50 rounded-lg transition-colors border border-transparent hover:border-primary-100"
-                                            >
-                                                <ExternalLink size={20} />
-                                            </a>
-                                        )}
-                                    </div>
-                                ))}
+                                    )
+                                })}
                             </div>
                         )}
                     </div>
@@ -228,6 +279,103 @@ export default function Dashboard() {
                     </div>
                 </div>
             </div>
+
+            {/* View Details Modal (Dashboard version) */}
+            {viewingBooking && (
+                <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setViewingBooking(null)} />
+                    <div className="relative bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+                        <div className="flex items-center justify-between p-6 border-b border-slate-100">
+                            <h3 className="text-xl font-bold text-slate-900">รายละเอียดการจอง</h3>
+                            <button onClick={() => setViewingBooking(null)} className="p-2 hover:bg-slate-100 rounded-full text-slate-400">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className="p-8 space-y-6">
+                            <div className="space-y-4">
+                                <div className="space-y-1">
+                                    <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">หัวข้อการประชุม</span>
+                                    <p className="text-lg font-bold text-slate-900 leading-tight">{viewingBooking.title}</p>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-6">
+                                    <div className="space-y-1">
+                                        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">ห้องประชุม</span>
+                                        <p className="font-bold text-primary-600 flex items-center gap-2">
+                                            <DoorOpen size={16} /> {viewingBooking.rooms?.name}
+                                        </p>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">ตำแหน่ง</span>
+                                        <p className="text-slate-600 flex items-center gap-2">
+                                            <MapPin size={16} /> โรงพยาบาลรามคำแหง 2
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-6">
+                                    <div className="space-y-1">
+                                        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">วันที่</span>
+                                        <p className="text-slate-700 font-bold">{formatThaiDate(viewingBooking.start_time, 'd MMMM yyyy')}</p>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">เวลา</span>
+                                        <p className="text-slate-700 font-bold">{format(new Date(viewingBooking.start_time), 'HH:mm')} - {format(new Date(viewingBooking.end_time), 'HH:mm')}</p>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-6">
+                                    <div className="space-y-1">
+                                        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">ผู้จอง</span>
+                                        <p className="text-slate-700 font-bold">
+                                            {viewingBooking.user_id === user?.id ? 'คุณ (เจ้าของการจอง)' : viewingBooking.requester_name || 'ไม่ระบุ'}
+                                        </p>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">แผนก/เบอร์โทร</span>
+                                        <p className="text-slate-700 font-bold">{viewingBooking.department || 'ไม่ระบุ'}</p>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-1">
+                                    <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">อีเมล (Gmail)</span>
+                                    <p className="text-slate-700 font-bold break-all">
+                                        {viewingBooking.requester_email || 'ไม่ระบุ'}
+                                    </p>
+                                </div>
+
+                                {viewingBooking.description && (
+                                    <div className="space-y-1">
+                                        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">รายละเอียดเพิ่มเติม</span>
+                                        <p className="text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-100 italic">"{viewingBooking.description}"</p>
+                                    </div>
+                                )}
+
+                                {viewingBooking.meeting_link && (
+                                    <div className="space-y-2">
+                                        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">ลิงก์เข้าร่วมประชุม</span>
+                                        <a
+                                            href={viewingBooking.meeting_link}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="block w-full text-center py-3 bg-primary-600 text-white font-bold rounded-xl hover:bg-primary-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-primary-100"
+                                        >
+                                            <ExternalLink size={18} /> เปิดลิงก์ประชุม
+                                        </a>
+                                    </div>
+                                )}
+                            </div>
+
+                            <button
+                                onClick={() => setViewingBooking(null)}
+                                className="w-full py-3 text-slate-600 font-bold hover:bg-slate-100 rounded-xl transition-colors mt-4"
+                            >
+                                ปิดหน้าต่าง
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

@@ -329,6 +329,7 @@ export default function Rooms() {
                     meeting_link: bookingForm.link,
                     description: bookingForm.description,
                     requester_name: bookingForm.requesterName,
+                    requester_email: user.email,
                     department: bookingForm.department
                 })
 
