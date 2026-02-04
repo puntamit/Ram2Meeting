@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import ConfirmModal from '../components/ConfirmModal'
@@ -24,6 +24,7 @@ import {
     Mail
 } from 'lucide-react'
 import { format, isPast } from 'date-fns'
+import { formatThaiDate } from '../lib/utils'
 
 const StatusBadge = ({ status, endTime }) => {
     const isExpired = isPast(new Date(endTime)) && status === 'booked'
@@ -49,6 +50,7 @@ const StatusBadge = ({ status, endTime }) => {
 
 export default function Bookings() {
     const { user, isAdmin } = useAuth()
+    const location = useLocation()
     const [bookings, setBookings] = useState([])
     const [loading, setLoading] = useState(true)
     const [confirmCancel, setConfirmCancel] = useState(null)
@@ -57,7 +59,7 @@ export default function Bookings() {
     const [searchTerm, setSearchTerm] = useState('')
     const [statusFilter, setStatusFilter] = useState('all')
     const [sortOrder, setSortOrder] = useState('desc')
-    const [dateFilter, setDateFilter] = useState('')
+    const [dateFilter, setDateFilter] = useState(location.state?.filterDate || '')
 
     // Helper to check if a booking is expired based on its end time
     const isBookingExpired = (endTime) => isPast(new Date(endTime))
@@ -296,7 +298,7 @@ export default function Bookings() {
                                     )}
                                     <div className="flex flex-col">
                                         <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">วันที่</span>
-                                        <span className="text-sm font-semibold text-slate-700">{format(new Date(booking.start_time), 'd MMM yyyy')}</span>
+                                        <span className="text-sm font-semibold text-slate-700">{formatThaiDate(booking.start_time, 'd MMM yyyy')}</span>
                                     </div>
                                     <div className="flex flex-col">
                                         <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">รูปแบบ</span>
@@ -398,7 +400,7 @@ export default function Bookings() {
                                 <div className="grid grid-cols-2 gap-6">
                                     <div className="space-y-1">
                                         <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">วันที่</span>
-                                        <p className="text-slate-700 font-bold">{format(new Date(viewingBooking.start_time), 'd MMMM yyyy')}</p>
+                                        <p className="text-slate-700 font-bold">{formatThaiDate(viewingBooking.start_time, 'd MMMM yyyy')}</p>
                                     </div>
                                     <div className="space-y-1">
                                         <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">เวลา</span>

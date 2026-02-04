@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { Link } from 'react-router-dom'
+import { formatThaiDate, cn } from '../lib/utils'
 
 const StatCard = ({ icon: Icon, label, value, color, to }) => {
     const content = (
@@ -28,7 +29,11 @@ const StatCard = ({ icon: Icon, label, value, color, to }) => {
 
     if (to) {
         return (
-            <Link to={to} className="block transition-transform hover:scale-[1.02] active:scale-[0.98]">
+            <Link
+                to={to}
+                state={to === '/bookings' && label === 'ประชุมวันนี้' ? { filterDate: new Date().toISOString().split('T')[0] } : null}
+                className="block transition-transform hover:scale-[1.02] active:scale-[0.98]"
+            >
                 {content}
             </Link>
         )
@@ -55,26 +60,36 @@ export default function Dashboard() {
             const todayStart = `${today}T00:00:00.000Z`
             const todayEnd = `${today}T23:59:59.999Z`
 
-            const [roomsCount, bookingsCount, todayCount, upcomingData] = await Promise.all([
+            let todayQuery = supabase.from('bookings').select('*', { count: 'exact', head: true })
+                .gte('start_time', todayStart)
+                .lte('start_time', todayEnd)
+
+            let upcomingQuery = supabase.from('bookings').select('*, rooms(name)')
+                .gte('start_time', new Date().toISOString())
+                .order('start_time', { ascending: true })
+                .limit(5)
+
+            let bookingsCountQuery = supabase.from('bookings').select('*', { count: 'exact', head: true })
+
+            if (!isAdmin) {
+                todayQuery = todayQuery.eq('user_id', user.id)
+                upcomingQuery = upcomingQuery.eq('user_id', user.id)
+                bookingsCountQuery = bookingsCountQuery.eq('user_id', user.id)
+            }
+
+            const [roomsCount, totalBookingsMatch, todayMatch, upcomingMatch] = await Promise.all([
                 supabase.from('rooms').select('*', { count: 'exact', head: true }),
-                supabase.from('bookings').select('*', { count: 'exact', head: true }),
-                supabase.from('bookings')
-                    .select('*', { count: 'exact', head: true })
-                    .gte('start_time', todayStart)
-                    .lte('start_time', todayEnd),
-                supabase.from('bookings')
-                    .select('*, rooms(name)')
-                    .gte('start_time', new Date().toISOString())
-                    .order('start_time', { ascending: true })
-                    .limit(5)
+                bookingsCountQuery,
+                todayQuery,
+                upcomingQuery
             ])
 
             setStats({
                 rooms: roomsCount.count || 0,
-                bookings: bookingsCount.count || 0,
-                today: todayCount.count || 0
+                bookings: totalBookingsMatch.count || 0,
+                today: todayMatch.count || 0
             })
-            setUpcoming(upcomingData.data || [])
+            setUpcoming(upcomingMatch.data || [])
         } catch (error) {
             console.error('Error fetching dashboard data:', error)
         } finally {
@@ -85,7 +100,10 @@ export default function Dashboard() {
     return (
         <div className="space-y-8">
             {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className={cn(
+                "grid grid-cols-1 md:grid-cols-3 gap-6",
+                !isAdmin && "md:grid-cols-2"
+            )}>
                 <StatCard
                     icon={DoorOpen}
                     label="ห้องทั้งหมด"
@@ -93,19 +111,20 @@ export default function Dashboard() {
                     color="bg-primary-600 shadow-lg shadow-primary-100"
                     to="/rooms"
                 />
-                <StatCard
-                    icon={CalendarClock}
-                    label="การจองทั้งหมด"
-                    value={stats.bookings}
-                    color="bg-amber-500 shadow-lg shadow-amber-100"
-                    to="/bookings"
-                />
+                {isAdmin && (
+                    <StatCard
+                        icon={CalendarClock}
+                        label="การจองทั้งหมด"
+                        value={stats.bookings}
+                        color="bg-amber-500 shadow-lg shadow-amber-100"
+                        to="/bookings"
+                    />
+                )}
                 <StatCard
                     icon={CheckCircle2}
-                    label="ประชุมวันนี้"
+                    label="ประชุมวันนี้ของคุณ"
                     value={stats.today}
                     color="bg-emerald-500 shadow-lg shadow-emerald-100"
-                    to="/bookings"
                 />
             </div>
 
@@ -134,8 +153,8 @@ export default function Dashboard() {
                                     <div key={booking.id} className="p-5 hover:bg-slate-50 transition-colors flex items-center justify-between group">
                                         <div className="flex items-center gap-4">
                                             <div className="flex flex-col items-center justify-center min-w-[64px] h-16 bg-primary-50 text-primary-700 rounded-xl">
-                                                <span className="text-xs font-bold uppercase">{format(new Date(booking.start_time), 'MMM')}</span>
-                                                <span className="text-xl font-black">{format(new Date(booking.start_time), 'dd')}</span>
+                                                <span className="text-xs font-bold uppercase">{formatThaiDate(booking.start_time, 'MMM')}</span>
+                                                <span className="text-xl font-black">{formatThaiDate(booking.start_time, 'dd')}</span>
                                             </div>
                                             <div>
                                                 <h4 className="font-bold text-slate-900 group-hover:text-primary-600 transition-colors">{booking.title}</h4>

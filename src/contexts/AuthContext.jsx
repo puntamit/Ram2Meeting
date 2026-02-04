@@ -67,6 +67,22 @@ export const AuthProvider = ({ children }) => {
     })
     const updatePassword = (newPassword) => supabase.auth.updateUser({ password: newPassword })
 
+    const dismissFirstLogin = async () => {
+        if (!user) return
+        try {
+            const { error } = await supabase
+                .from('profiles')
+                .update({ must_change_password: false })
+                .eq('id', user.id)
+
+            if (error) throw error
+            // Refresh profile
+            fetchProfile(user.id)
+        } catch (error) {
+            console.error('Error dismissing first login modal:', error.message)
+        }
+    }
+
     const value = {
         user,
         profile,
@@ -76,6 +92,7 @@ export const AuthProvider = ({ children }) => {
         signOut,
         resetPassword,
         updatePassword,
+        dismissFirstLogin,
         isAdmin: profile?.role === 'admin'
     }
 

@@ -44,11 +44,11 @@ export default function Login() {
 
                 <div className="relative z-10">
                     <h2 className="text-5xl font-bold leading-tight mb-6">
-                        พื้นที่อัจฉริยะแด่ <br />
-                        <span className="text-primary-200">ทีมที่ยอดเยี่ยม</span>
+                        ระบบจองห้องประชุม <br />
+                        <span className="text-primary-200">โรงพยาบาลรามคำแหง 2</span>
                     </h2>
                     <p className="text-primary-100 text-lg max-w-md">
-                        วิธีที่ง่ายที่สุดในการจองห้องประชุม จัดการพื้นที่ Hybrid และเพิ่มประสิทธิภาพการทำงานในออฟฟิศของคุณ
+                        นวัตกรรมการจัดการพื้นที่ประชุม เพื่อการประสานงานที่มีประสิทธิภาพและรวดเร็วสำหรับบุคลากร RAM2 Hospital ทุกคน
                     </p>
                 </div>
 

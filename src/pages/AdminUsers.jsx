@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { createClient } from '@supabase/supabase-js'
+import * as XLSX from 'xlsx'
 import {
     Users as UsersIcon,
     UserPlus,
@@ -15,7 +16,10 @@ import {
     CheckCircle2,
     AlertCircle,
     UserCircle,
-    Key
+    Key,
+    FileSpreadsheet,
+    Upload,
+    FileText
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 
@@ -45,6 +49,18 @@ export default function AdminUsers() {
     const [resettingUser, setResettingUser] = useState(null)
     const [newPassword, setNewPassword] = useState('')
     const [resetting, setResetting] = useState(false)
+
+    const [showBulkModal, setShowBulkModal] = useState(false)
+    const [bulkData, setBulkData] = useState([])
+    const [importing, setImporting] = useState(false)
+
+    const [deletingUser, setDeletingUser] = useState(null)
+    const [deleting, setDeleting] = useState(false)
+    const [selectedUsers, setSelectedUsers] = useState([])
+
+    // Pagination State
+    const [currentPage, setCurrentPage] = useState(1)
+    const itemsPerPage = 10
 
     useEffect(() => {
         fetchUsers()
@@ -126,24 +142,141 @@ export default function AdminUsers() {
         setSuccess(null)
 
         try {
-            const { data, error } = await supabase.functions.invoke('admin-change-password', {
+            const { data, error: invokeError } = await supabase.functions.invoke('admin-change-password', {
                 body: {
                     userId: resettingUser.id,
                     newPassword: newPassword
                 }
             })
 
-            if (error) throw error
-            if (data.error) throw new Error(data.error)
+            if (invokeError) {
+                console.error('Invoke Error Detail:', invokeError)
+                throw new Error(`เชื่อมต่อฟังก์ชันล้มเหลว: ${invokeError.message || 'CORS or Network Error'}`)
+            }
+
+            if (data?.error) throw new Error(data.error)
 
             setSuccess(`เปลี่ยนรหัสผ่านให้ ${resettingUser.full_name} เรียบร้อยแล้ว`)
             setResettingUser(null)
             setNewPassword('')
         } catch (error) {
-            console.error('Error resetting password:', error)
+            console.error('Full Error Object:', error)
             setError(error.message)
         } finally {
             setResetting(false)
+        }
+    }
+
+    const handleDeleteUser = async () => {
+        const idsToDelete = deletingUser && !Array.isArray(deletingUser)
+            ? [deletingUser.id]
+            : selectedUsers
+
+        if (idsToDelete.length === 0) return
+
+        setDeleting(true)
+        setError(null)
+        setSuccess(null)
+
+        try {
+            const { data, error: invokeError } = await supabase.functions.invoke('admin-delete-user', {
+                body: { userIds: idsToDelete }
+            })
+
+            if (invokeError) throw invokeError
+            if (data?.error) throw new Error(data.error)
+
+            setSuccess(data.message || `ลบสมาชิก ${idsToDelete.length > 1 ? idsToDelete.length + ' รายการ' : deletingUser.full_name} เรียบร้อยแล้ว`)
+            setDeletingUser(null)
+            setSelectedUsers([])
+            fetchUsers()
+        } catch (error) {
+            console.error('Error deleting users:', error)
+            setError(error.message)
+        } finally {
+            setDeleting(false)
+        }
+    }
+
+    const toggleUserSelection = (id) => {
+        setSelectedUsers(prev =>
+            prev.includes(id)
+                ? prev.filter(uid => uid !== id)
+                : [...prev, id]
+        )
+    }
+
+    const toggleSelectAll = () => {
+        const currentPageIds = currentItems.map(u => u.id)
+        const allSelected = currentPageIds.every(id => selectedUsers.includes(id))
+
+        if (allSelected) {
+            setSelectedUsers(prev => prev.filter(id => !currentPageIds.includes(id)))
+        } else {
+            setSelectedUsers(prev => [...new Set([...prev, ...currentPageIds])])
+        }
+    }
+
+    const handleFileUpload = (e) => {
+        const file = e.target.files[0]
+        if (!file) return
+
+        const reader = new FileReader()
+        reader.onload = (evt) => {
+            try {
+                const bstr = evt.target.result
+                const wb = XLSX.read(bstr, { type: 'binary' })
+                const wsname = wb.SheetNames[0]
+                const ws = wb.Sheets[wsname]
+                const data = XLSX.utils.sheet_to_json(ws)
+
+                // Map columns
+                const formattedData = data.map(row => {
+                    const email = row['อีเมล'] || row['Email'] || row['email'] || Object.values(row)[0]
+                    const emailPrefix = email && typeof email === 'string' ? email.split('@')[0] : 'Member'
+
+                    return {
+                        full_name: row['ชื่อ-นามสกุล'] || row['Name'] || row['ชื่อ'] || emailPrefix,
+                        email: email,
+                        department: row['แผนก'] || row['Department'] || '-',
+                        phone: row['เบอร์โทรศัพท์'] || row['Phone'] || '-',
+                        password: row['รหัสผ่าน'] || row['Password'] || '123456'
+                    }
+                }).filter(u => u.email && typeof u.email === 'string' && u.email.includes('@'))
+
+                setBulkData(formattedData)
+            } catch (error) {
+                console.error('Error reading excel:', error)
+                setError('ไม่สามารถอ่านไฟล์ Excel ได้ กรุณาตรวจสอบรูปแบบไฟล์')
+            }
+        }
+        reader.readAsBinaryString(file)
+    }
+
+    const startBulkImport = async () => {
+        if (bulkData.length === 0) return
+        setImporting(true)
+        setError(null)
+
+        try {
+            const { data, error: invokeError } = await supabase.functions.invoke('admin-bulk-import', {
+                body: { users: bulkData }
+            })
+
+            if (invokeError) throw invokeError
+
+            const successCount = data.success?.length || 0
+            const errorCount = data.errors?.length || 0
+
+            setSuccess(`นำเข้าสมาชิกสำเร็จ ${successCount} ราย (พลาด ${errorCount} ราย)`)
+            setShowBulkModal(false)
+            setBulkData([])
+            fetchUsers()
+        } catch (error) {
+            console.error('Bulk import error:', error)
+            setError(`นำเข้าล้มเหลว: ${error.message}`)
+        } finally {
+            setImporting(false)
         }
     }
 
@@ -153,6 +286,17 @@ export default function AdminUsers() {
         u.department?.toLowerCase().includes(search.toLowerCase())
     )
 
+    // Pagination Logic
+    const indexOfLastItem = currentPage * itemsPerPage
+    const indexOfFirstItem = indexOfLastItem - itemsPerPage
+    const currentItems = filteredUsers.slice(indexOfFirstItem, indexOfLastItem)
+    const totalPages = Math.ceil(filteredUsers.length / itemsPerPage)
+
+    // Reset to page 1 when searching
+    useEffect(() => {
+        setCurrentPage(1)
+    }, [search])
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -160,13 +304,31 @@ export default function AdminUsers() {
                     <h1 className="text-2xl font-bold text-slate-900">จัดการสมาชิก</h1>
                     <p className="text-slate-500">จัดการข้อมูลผู้ใช้งานและกำหนดสิทธิ์ในระบบ</p>
                 </div>
-                <button
-                    onClick={() => setShowAddModal(true)}
-                    className="flex items-center justify-center gap-2 bg-primary-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-primary-700 transition-all shadow-lg shadow-primary-100"
-                >
-                    <UserPlus size={20} />
-                    เพิ่มสมาชิกใหม่
-                </button>
+                <div className="flex gap-2">
+                    {selectedUsers.length > 0 && (
+                        <button
+                            onClick={() => setDeletingUser({ multiple: true, count: selectedUsers.length })}
+                            className="flex items-center justify-center gap-2 bg-red-50 text-red-600 border border-red-100 px-6 py-3 rounded-xl font-bold hover:bg-red-100 transition-all shadow-sm"
+                        >
+                            <Trash2 size={20} />
+                            ลบที่เลือก ({selectedUsers.length})
+                        </button>
+                    )}
+                    <button
+                        onClick={() => setShowBulkModal(true)}
+                        className="flex items-center justify-center gap-2 bg-white text-slate-700 border border-slate-200 px-6 py-3 rounded-xl font-bold hover:bg-slate-50 transition-all shadow-sm"
+                    >
+                        <FileSpreadsheet size={20} className="text-emerald-600" />
+                        นำเข้า Excel
+                    </button>
+                    <button
+                        onClick={() => setShowAddModal(true)}
+                        className="flex items-center justify-center gap-2 bg-primary-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-primary-700 transition-all shadow-lg shadow-primary-100"
+                    >
+                        <UserPlus size={20} />
+                        เพิ่มสมาชิกใหม่
+                    </button>
+                </div>
             </div>
 
             {/* Stats & Search */}
@@ -203,6 +365,14 @@ export default function AdminUsers() {
                     <table className="w-full text-left">
                         <thead>
                             <tr className="bg-slate-50 border-b border-slate-200">
+                                <th className="px-6 py-4 w-10">
+                                    <input
+                                        type="checkbox"
+                                        className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+                                        checked={currentItems.length > 0 && currentItems.every(u => selectedUsers.includes(u.id))}
+                                        onChange={toggleSelectAll}
+                                    />
+                                </th>
                                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-widest">ผู้ใช้งาน</th>
                                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-widest">แผนก/เบอร์โทร</th>
                                 <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-widest">บทบาท</th>
@@ -221,16 +391,30 @@ export default function AdminUsers() {
                                 ))
                             ) : filteredUsers.length === 0 ? (
                                 <tr>
-                                    <td colSpan="4" className="px-6 py-12 text-center text-slate-500 italic">
+                                    <td colSpan="5" className="px-6 py-12 text-center text-slate-500 italic">
                                         ไม่พบข้อมูลสมาชิก
                                     </td>
                                 </tr>
                             ) : (
-                                filteredUsers.map(user => (
-                                    <tr key={user.id} className="hover:bg-slate-50 transition-colors group">
+                                currentItems.map(user => (
+                                    <tr key={user.id} className={cn(
+                                        "hover:bg-slate-50 transition-colors group",
+                                        selectedUsers.includes(user.id) && "bg-primary-50/30"
+                                    )}>
+                                        <td className="px-6 py-4">
+                                            <input
+                                                type="checkbox"
+                                                className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+                                                checked={selectedUsers.includes(user.id)}
+                                                onChange={() => toggleUserSelection(user.id)}
+                                            />
+                                        </td>
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-4">
-                                                <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 group-hover:bg-primary-50 group-hover:text-primary-600 transition-colors">
+                                                <div className={cn(
+                                                    "w-10 h-10 rounded-full flex items-center justify-center transition-colors",
+                                                    selectedUsers.includes(user.id) ? "bg-primary-100 text-primary-600" : "bg-slate-100 text-slate-400 group-hover:bg-primary-50 group-hover:text-primary-600"
+                                                )}>
                                                     <UserCircle size={24} />
                                                 </div>
                                                 <div>
@@ -264,7 +448,11 @@ export default function AdminUsers() {
                                                 >
                                                     <Key size={18} />
                                                 </button>
-                                                <button className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100">
+                                                <button
+                                                    onClick={() => setDeletingUser(user)}
+                                                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                                                    title="ลบสมาชิก"
+                                                >
                                                     <Trash2 size={18} />
                                                 </button>
                                             </div>
@@ -275,6 +463,47 @@ export default function AdminUsers() {
                         </tbody>
                     </table>
                 </div>
+
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                    <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+                        <p className="text-sm text-slate-500">
+                            แสดง <span className="font-bold">{indexOfFirstItem + 1}</span> ถึง <span className="font-bold">{Math.min(indexOfLastItem, filteredUsers.length)}</span> จากทั้งหมด <span className="font-bold">{filteredUsers.length}</span> คน
+                        </p>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                                disabled={currentPage === 1}
+                                className="px-4 py-2 border border-slate-200 rounded-lg text-sm font-bold text-slate-600 hover:bg-white transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                            >
+                                ก่อนหน้า
+                            </button>
+                            <div className="flex items-center gap-1">
+                                {Array.from({ length: totalPages }).map((_, i) => (
+                                    <button
+                                        key={i}
+                                        onClick={() => setCurrentPage(i + 1)}
+                                        className={cn(
+                                            "w-8 h-8 rounded-lg text-sm font-bold transition-all",
+                                            currentPage === i + 1
+                                                ? "bg-primary-600 text-white shadow-md shadow-primary-100"
+                                                : "text-slate-500 hover:bg-white hover:text-slate-700"
+                                        )}
+                                    >
+                                        {i + 1}
+                                    </button>
+                                ))}
+                            </div>
+                            <button
+                                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                                disabled={currentPage === totalPages}
+                                className="px-4 py-2 border border-slate-200 rounded-lg text-sm font-bold text-slate-600 hover:bg-white transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                            >
+                                ถัดไป
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Add User Modal */}
@@ -396,6 +625,93 @@ export default function AdminUsers() {
                 </div>
             )}
 
+            {/* Bulk Import Modal */}
+            {showBulkModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => !importing && setShowBulkModal(false)} />
+                    <div className="relative bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+                        <div className="flex items-center justify-between p-6 border-b border-slate-100">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600">
+                                    <FileSpreadsheet size={20} />
+                                </div>
+                                <h3 className="text-xl font-bold text-slate-900">นำเข้าสมาชิกจาก Excel</h3>
+                            </div>
+                            <button onClick={() => setShowBulkModal(false)} className="p-2 hover:bg-slate-100 rounded-full text-slate-400">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="p-6 space-y-6">
+                            {bulkData.length === 0 ? (
+                                <div className="border-2 border-dashed border-slate-200 rounded-2xl p-12 flex flex-col items-center justify-center gap-4 hover:border-emerald-300 transition-colors bg-slate-50 group relative">
+                                    <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center text-slate-400 group-hover:text-emerald-500 transition-colors">
+                                        <Upload size={32} />
+                                    </div>
+                                    <div className="text-center">
+                                        <p className="font-bold text-slate-900 text-lg">เลือกไฟล์ Excel หรือ CSV</p>
+                                        <p className="text-sm text-slate-500 mt-2">
+                                            ✅ ใช้ไฟล์ที่มีเฉพาะ <strong>อีเมล</strong> อย่างเดียวได้เลยครับ <br />
+                                            ระบบจะตั้งชื่อให้อัตโนมัติจากอีเมล และใช้รหัสผ่าน <strong>123456</strong>
+                                        </p>
+                                    </div>
+                                    <input
+                                        type="file"
+                                        accept=".xlsx, .xls, .csv"
+                                        onChange={handleFileUpload}
+                                        className="absolute inset-0 opacity-0 cursor-pointer"
+                                    />
+                                    <button className="mt-2 bg-white border border-slate-200 px-4 py-2 rounded-lg text-sm font-bold text-slate-700 shadow-sm pointer-events-none">เลือกไฟล์</button>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <p className="font-bold text-slate-900">พบข้อมูล {bulkData.length} รายการ</p>
+                                        <button onClick={() => setBulkData([])} className="text-sm text-red-600 font-bold hover:underline">เปลี่ยนไฟล์</button>
+                                    </div>
+                                    <div className="max-h-[300px] overflow-auto border border-slate-100 rounded-xl shadow-inner bg-slate-50">
+                                        <table className="w-full text-left text-sm">
+                                            <thead>
+                                                <tr className="sticky top-0 bg-white border-b border-slate-100 shadow-sm">
+                                                    <th className="px-4 py-3 font-bold text-slate-600">ชื่อ-นามสกุล</th>
+                                                    <th className="px-4 py-3 font-bold text-slate-600">อีเมล</th>
+                                                    <th className="px-4 py-3 font-bold text-slate-600">แผนก</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100">
+                                                {bulkData.map((u, i) => (
+                                                    <tr key={i}>
+                                                        <td className="px-4 py-2 text-slate-900 uppercase font-medium">{u.full_name}</td>
+                                                        <td className="px-4 py-2 text-slate-500 italic">{u.email}</td>
+                                                        <td className="px-4 py-2 text-slate-500">{u.department}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl flex items-start gap-3">
+                                        <AlertCircle className="text-amber-600 shrink-0 mt-0.5" size={18} />
+                                        <p className="text-xs text-amber-700 leading-relaxed">
+                                            ระบบจะส่งรหัสผ่านเริ่มต้นเป็น <strong>123456</strong> ให้ทุกคน <br />
+                                            คุณสามารถกรอกแค่ <strong>ชื่อ</strong> และ <strong>อีเมล</strong> ในไฟล์ได้เลยครับ ส่วนแผนกและเบอร์โทรสามารถมาแก้ไขเพิ่มเติมภายหลังได้ในหน้าจัดการสมาชิกครับ
+                                        </p>
+                                    </div>
+
+                                    <button
+                                        onClick={startBulkImport}
+                                        disabled={importing}
+                                        className="w-full py-4 bg-emerald-600 text-white font-bold rounded-2xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 disabled:opacity-50 flex items-center justify-center gap-2 text-lg"
+                                    >
+                                        {importing ? <Loader2 size={24} className="animate-spin" /> : 'ยืนยันการนำเข้าทั้งหมด'}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Reset Password Modal */}
             {resettingUser && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -447,6 +763,47 @@ export default function AdminUsers() {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Delete Confirmation Modal */}
+            {deletingUser && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => !deleting && setDeletingUser(null)} />
+                    <div className="relative bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+                        <div className="p-8 text-center">
+                            <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center text-red-600 mx-auto mb-6">
+                                <Trash2 size={40} />
+                            </div>
+                            <h3 className="text-2xl font-bold text-slate-900 mb-2">ยืนยันการลบสมาชิก</h3>
+                            <p className="text-slate-500 mb-8 px-4">
+                                {deletingUser.multiple ? (
+                                    <>คุณกำลังจะลบสมาชิกที่เลือกจำนวน <span className="font-bold text-slate-900">{deletingUser.count} รายการ</span> ออกจากระบบ</>
+                                ) : (
+                                    <>คุณกำลังจะลบ <span className="font-bold text-slate-900">{deletingUser.full_name}</span> ออกจากระบบ</>
+                                )}
+                                <br />
+                                <span className="text-red-600 text-sm font-medium">คำเตือน: การกระทำนี้ไม่สามารถย้อนกลับได้</span>
+                            </p>
+
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setDeletingUser(null)}
+                                    disabled={deleting}
+                                    className="flex-1 py-3 bg-slate-100 text-slate-700 font-bold rounded-2xl hover:bg-slate-200 transition-all"
+                                >
+                                    ยกเลิก
+                                </button>
+                                <button
+                                    onClick={handleDeleteUser}
+                                    disabled={deleting}
+                                    className="flex-1 py-3 bg-red-600 text-white font-bold rounded-2xl hover:bg-red-700 transition-all shadow-lg shadow-red-100 disabled:opacity-50 flex items-center justify-center gap-2"
+                                >
+                                    {deleting ? <Loader2 size={18} className="animate-spin" /> : 'ยืนยันการลบ'}
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}
