@@ -38,9 +38,7 @@ export default function Login() {
 
                 <div className="relative z-10">
                     <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 bg-white/20 backdrop-blur-lg rounded-xl flex items-center justify-center border border-white/30">
-                            <CalendarCheck size={28} />
-                        </div>
+                        <img src="/images/Ram2Logo.png" alt="Logo" className="h-16 w-auto" />
                     </div>
                 </div>
 
@@ -65,9 +63,7 @@ export default function Login() {
             <div className="flex items-center justify-center p-8 bg-white">
                 <div className="w-full max-w-md space-y-8">
                     <div className="lg:hidden text-center mb-12">
-                        <div className="w-16 h-16 bg-primary-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-primary-100 mx-auto mb-4">
-                            <CalendarCheck size={32} />
-                        </div>
+                        <img src="/images/Ram2Logo.png" alt="Logo" className="h-16 w-auto mx-auto mb-4" />
                     </div>
 
                     <div>

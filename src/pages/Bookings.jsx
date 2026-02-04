@@ -18,7 +18,10 @@ import {
     Laptop,
     X,
     DoorOpen,
-    Search
+    Search,
+    ArrowDownAz,
+    ArrowUpAz,
+    Mail
 } from 'lucide-react'
 import { format, isPast } from 'date-fns'
 
@@ -53,13 +56,15 @@ export default function Bookings() {
     const [viewingBooking, setViewingBooking] = useState(null)
     const [searchTerm, setSearchTerm] = useState('')
     const [statusFilter, setStatusFilter] = useState('all')
+    const [sortOrder, setSortOrder] = useState('desc')
+    const [dateFilter, setDateFilter] = useState('')
 
     // Helper to check if a booking is expired based on its end time
     const isBookingExpired = (endTime) => isPast(new Date(endTime))
 
     useEffect(() => {
         if (user) fetchUserBookings()
-    }, [user])
+    }, [user, sortOrder])
 
     const fetchUserBookings = async () => {
         try {
@@ -67,7 +72,7 @@ export default function Bookings() {
             let query = supabase
                 .from('bookings')
                 .select('*, rooms(name, building, floor)')
-                .order('start_time', { ascending: false })
+                .order('start_time', { ascending: sortOrder === 'asc' })
 
             // If not admin, only show own bookings
             if (!isAdmin) {
@@ -133,7 +138,10 @@ export default function Bookings() {
         const currentStatus = isExpired ? 'completed' : booking.status
         const matchesStatus = statusFilter === 'all' || currentStatus === statusFilter
 
-        return matchesSearch && matchesStatus
+        const bookingDate = format(new Date(booking.start_time), 'yyyy-MM-dd')
+        const matchesDate = !dateFilter || bookingDate === dateFilter
+
+        return matchesSearch && matchesStatus && matchesDate
     })
 
     return (
@@ -165,7 +173,28 @@ export default function Bookings() {
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
-                <div className="flex bg-slate-100 p-1 rounded-xl w-full md:w-auto">
+
+                <div className="relative w-full md:w-auto">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center pointer-events-none text-slate-400">
+                        <Calendar size={18} />
+                    </div>
+                    <input
+                        type="date"
+                        className="w-full pl-11 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-primary-100 focus:border-primary-500 transition-all outline-none text-sm text-slate-600"
+                        value={dateFilter}
+                        onChange={(e) => setDateFilter(e.target.value)}
+                    />
+                    {dateFilter && (
+                        <button
+                            onClick={() => setDateFilter('')}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                        >
+                            <X size={14} />
+                        </button>
+                    )}
+                </div>
+
+                <div className="flex bg-slate-100 p-1 rounded-xl w-full md:w-auto overflow-x-auto no-scrollbar">
                     {[
                         { id: 'all', label: 'ทั้งหมด' },
                         { id: 'booked', label: 'รอใช้งาน' },
@@ -175,7 +204,7 @@ export default function Bookings() {
                         <button
                             key={tab.id}
                             onClick={() => setStatusFilter(tab.id)}
-                            className={`flex-1 md:flex-none px-4 py-2 text-xs font-bold rounded-lg transition-all ${statusFilter === tab.id
+                            className={`flex-1 md:flex-none whitespace-nowrap px-4 py-2 text-xs font-bold rounded-lg transition-all ${statusFilter === tab.id
                                 ? 'bg-white text-primary-600 shadow-sm'
                                 : 'text-slate-500 hover:text-slate-700'
                                 }`}
@@ -183,6 +212,28 @@ export default function Bookings() {
                             {tab.label}
                         </button>
                     ))}
+                </div>
+                <div className="flex bg-slate-100 p-1 rounded-xl w-full md:w-auto">
+                    <button
+                        onClick={() => setSortOrder('desc')}
+                        className={`flex-1 md:flex-none flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition-all ${sortOrder === 'desc'
+                            ? 'bg-white text-primary-600 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-700'
+                            }`}
+                    >
+                        <ArrowDownAz size={16} />
+                        ล่าสุด
+                    </button>
+                    <button
+                        onClick={() => setSortOrder('asc')}
+                        className={`flex-1 md:flex-none flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg transition-all ${sortOrder === 'asc'
+                            ? 'bg-white text-primary-600 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-700'
+                            }`}
+                    >
+                        <ArrowUpAz size={16} />
+                        เก่าสุด
+                    </button>
                 </div>
             </div>
 
@@ -213,9 +264,16 @@ export default function Bookings() {
                                         <div className="flex items-center gap-2">
                                             <h3 className="text-xl font-bold text-slate-900">{booking.title}</h3>
                                             {isAdmin && booking.requester_name && (
-                                                <span className="text-xs font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
-                                                    โดย: {booking.requester_name}
-                                                </span>
+                                                <div className="flex flex-col">
+                                                    <span className="text-xs font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full inline-block">
+                                                        โดย: {booking.requester_name}
+                                                    </span>
+                                                    {booking.profiles?.email && (
+                                                        <span className="text-[10px] text-slate-400 flex items-center gap-1 ml-2 mt-0.5">
+                                                            <Mail size={10} /> {booking.profiles.email}
+                                                        </span>
+                                                    )}
+                                                </div>
                                             )}
                                         </div>
                                         <div className="flex items-center gap-4 text-sm text-slate-500 font-medium">
