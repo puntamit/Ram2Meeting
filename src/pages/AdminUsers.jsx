@@ -14,7 +14,8 @@ import {
     X,
     CheckCircle2,
     AlertCircle,
-    UserCircle
+    UserCircle,
+    Key
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 
@@ -40,6 +41,10 @@ export default function AdminUsers() {
         phone: '',
         role: 'user'
     })
+
+    const [resettingUser, setResettingUser] = useState(null)
+    const [newPassword, setNewPassword] = useState('')
+    const [resetting, setResetting] = useState(false)
 
     useEffect(() => {
         fetchUsers()
@@ -109,6 +114,36 @@ export default function AdminUsers() {
             setError(error.message)
         } finally {
             setSubmitting(false)
+        }
+    }
+
+    const handleResetPassword = async (e) => {
+        e.preventDefault()
+        if (!resettingUser || !newPassword) return
+
+        setResetting(true)
+        setError(null)
+        setSuccess(null)
+
+        try {
+            const { data, error } = await supabase.functions.invoke('admin-change-password', {
+                body: {
+                    userId: resettingUser.id,
+                    newPassword: newPassword
+                }
+            })
+
+            if (error) throw error
+            if (data.error) throw new Error(data.error)
+
+            setSuccess(`เปลี่ยนรหัสผ่านให้ ${resettingUser.full_name} เรียบร้อยแล้ว`)
+            setResettingUser(null)
+            setNewPassword('')
+        } catch (error) {
+            console.error('Error resetting password:', error)
+            setError(error.message)
+        } finally {
+            setResetting(false)
         }
     }
 
@@ -221,9 +256,18 @@ export default function AdminUsers() {
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 text-right">
-                                            <button className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100">
-                                                <Trash2 size={18} />
-                                            </button>
+                                            <div className="flex items-center justify-end gap-2">
+                                                <button
+                                                    onClick={() => setResettingUser(user)}
+                                                    className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                                                    title="รีเซ็ตรหัสผ่าน"
+                                                >
+                                                    <Key size={18} />
+                                                </button>
+                                                <button className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100">
+                                                    <Trash2 size={18} />
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))
@@ -345,6 +389,61 @@ export default function AdminUsers() {
                                     className="flex-1 py-3 bg-primary-600 text-white font-bold rounded-xl hover:bg-primary-700 transition-all shadow-lg shadow-primary-100 disabled:opacity-50 flex items-center justify-center gap-2"
                                 >
                                     {submitting ? <Loader2 size={18} className="animate-spin" /> : <><UserPlus size={18} /> บันทึกสมาชิก</>}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Reset Password Modal */}
+            {resettingUser && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => !resetting && setResettingUser(null)} />
+                    <div className="relative bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+                        <div className="flex items-center justify-between p-6 border-b border-slate-100">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600">
+                                    <Key size={20} />
+                                </div>
+                                <h3 className="text-xl font-bold text-slate-900">รีเซ็ตรหัสผ่าน</h3>
+                            </div>
+                        </div>
+
+                        <form onSubmit={handleResetPassword} className="p-6 space-y-4">
+                            <div>
+                                <p className="text-sm text-slate-500 mb-4">
+                                    กำลังเปลี่ยนรหัสผ่านให้: <br />
+                                    <span className="font-bold text-slate-900">{resettingUser.full_name}</span>
+                                </p>
+                                <label className="text-sm font-semibold text-slate-700">รหัสผ่านใหม่</label>
+                                <input
+                                    required
+                                    type="password"
+                                    minLength={6}
+                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-primary-100 focus:border-primary-500 transition-all outline-none mt-1"
+                                    placeholder="อย่างน้อย 6 ตัวอักษร"
+                                    value={newPassword}
+                                    onChange={(e) => setNewPassword(e.target.value)}
+                                    autoFocus
+                                />
+                            </div>
+
+                            <div className="flex gap-3 pt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setResettingUser(null)}
+                                    disabled={resetting}
+                                    className="flex-1 py-3 text-slate-600 font-bold hover:bg-slate-100 rounded-xl transition-colors"
+                                >
+                                    ยกเลิก
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={resetting || !newPassword}
+                                    className="flex-1 py-3 bg-amber-600 text-white font-bold rounded-xl hover:bg-amber-700 transition-all shadow-lg shadow-amber-100 disabled:opacity-50 flex items-center justify-center gap-2"
+                                >
+                                    {resetting ? <Loader2 size={18} className="animate-spin" /> : 'ยืนยัน'}
                                 </button>
                             </div>
                         </form>
