@@ -21,10 +21,21 @@ import {
     Search,
     ArrowDownAz,
     ArrowUpAz,
-    Mail
+    Mail,
+    Pencil,
+    Save,
+    CalendarPlus,
+    Tv,
+    Projector,
+    Globe,
+    Loader2
 } from 'lucide-react'
-import { format, isPast } from 'date-fns'
+import { format, isPast, addHours, startOfHour, isBefore } from 'date-fns'
 import { formatThaiDate } from '../lib/utils'
+
+function cn(...inputs) {
+    return inputs.filter(Boolean).join(' ')
+}
 
 const StatusBadge = ({ status, endTime }) => {
     const isExpired = isPast(new Date(endTime)) && status === 'booked'
@@ -61,12 +72,53 @@ export default function Bookings() {
     const [sortOrder, setSortOrder] = useState('desc')
     const [dateFilter, setDateFilter] = useState(location.state?.filterDate || '')
 
+    // Edit Booking State
+    const [roomsList, setRoomsList] = useState([])
+    const [editingBooking, setEditingBooking] = useState(null)
+    const [showEditModal, setShowEditModal] = useState(false)
+    const [updating, setUpdating] = useState(false)
+    const [updateSuccess, setUpdateSuccess] = useState(false)
+    const [occupiedSlots, setOccupiedSlots] = useState([])
+
     // Helper to check if a booking is expired based on its end time
     const isBookingExpired = (endTime) => isPast(new Date(endTime))
 
     useEffect(() => {
-        if (user) fetchUserBookings()
+        if (user) {
+            fetchUserBookings()
+            fetchRooms()
+        }
     }, [user, sortOrder])
+
+    useEffect(() => {
+        if (editingBooking?.room_id && editingBooking?.date) {
+            fetchOccupiedSlots()
+        }
+    }, [editingBooking?.room_id, editingBooking?.date])
+
+    const fetchOccupiedSlots = async () => {
+        if (!editingBooking?.room_id || !editingBooking?.date) return
+
+        const startOfDay = new Date(`${editingBooking.date}T00:00:00`)
+        const endOfDay = new Date(`${editingBooking.date}T23:59:59`)
+
+        const { data } = await supabase
+            .from('bookings')
+            .select('id, start_time, end_time')
+            .eq('room_id', editingBooking.room_id)
+            .eq('status', 'booked')
+            .neq('id', editingBooking.id) // Exclude current booking
+            .lt('start_time', endOfDay.toISOString())
+            .gt('end_time', startOfDay.toISOString())
+            .order('start_time')
+
+        setOccupiedSlots(data || [])
+    }
+
+    const fetchRooms = async () => {
+        const { data } = await supabase.from('rooms').select('*').order('name')
+        setRoomsList(data || [])
+    }
 
     const fetchUserBookings = async () => {
         try {
@@ -126,6 +178,87 @@ export default function Bookings() {
         } catch (error) {
             console.error('Error finishing booking:', error)
             setErrorMsg(error.message)
+        }
+    }
+
+    const handleEditBooking = (booking) => {
+        setEditingBooking({
+            ...booking,
+            // Ensure values for controlled inputs
+            room_id: booking.rooms?.id || booking.room_id, // Ensure room_id is present
+            date: format(new Date(booking.start_time), 'yyyy-MM-dd'),
+            startTime: format(new Date(booking.start_time), 'HH:mm'),
+            endTime: format(new Date(booking.end_time), 'HH:mm'),
+            meeting_link: booking.meeting_link || '',
+            description: booking.description || '',
+            requester_name: booking.requester_name || '',
+            department: booking.department || '',
+            meeting_type: booking.meeting_type || 'onsite'
+        })
+        setShowEditModal(true)
+    }
+
+    const handleUpdateBooking = async (e) => {
+        e.preventDefault()
+        setUpdating(true)
+        setErrorMsg(null)
+
+        try {
+            // 1. Prepare new datetime objects
+            const startDateTime = new Date(`${editingBooking.date}T${editingBooking.startTime}:00`)
+            const endDateTime = new Date(`${editingBooking.date}T${editingBooking.endTime}:00`)
+
+            if (startDateTime >= endDateTime) {
+                throw new Error('เวลาสิ้นสุดต้องหลังจากเวลาเริ่ม')
+            }
+
+            // 2. Refresh conflict check (Server-side)
+            const { data: conflicts, error: conflictError } = await supabase
+                .from('bookings')
+                .select('id')
+                .eq('room_id', editingBooking.room_id)
+                .eq('status', 'booked')
+                .neq('id', editingBooking.id) // Exclude current booking
+                .lt('start_time', endDateTime.toISOString())
+                .gt('end_time', startDateTime.toISOString())
+
+            if (conflictError) throw conflictError
+
+            if (conflicts && conflicts.length > 0) {
+                throw new Error('ช่วงเวลาหรือห้องที่เลือกมีการจองแล้ว กรุณาตรวจสอบอีกครั้ง')
+            }
+
+            // 3. Update
+            const { data, error } = await supabase
+                .from('bookings')
+                .update({
+                    room_id: editingBooking.room_id,
+                    start_time: startDateTime.toISOString(),
+                    end_time: endDateTime.toISOString(),
+                    title: editingBooking.title,
+                    meeting_link: editingBooking.meeting_link,
+                    description: editingBooking.description,
+                    requester_name: editingBooking.requester_name,
+                    department: editingBooking.department,
+                    meeting_type: editingBooking.meeting_type
+                })
+                .eq('id', editingBooking.id)
+                .select()
+
+            if (error) throw error
+            if (!data || data.length === 0) {
+                throw new Error('บันทึกไม่สำเร็จ: คุณอาจไม่มีสิทธิ์แก้ไขรายการนี้ (ตรวจสอบ Policy)')
+            }
+
+            setUpdateSuccess(true)
+            setShowEditModal(false)
+            setEditingBooking(null)
+            fetchUserBookings()
+        } catch (error) {
+            console.error('Error updating booking:', error)
+            setErrorMsg(error.message)
+        } finally {
+            setUpdating(false)
         }
     }
 
@@ -338,6 +471,15 @@ export default function Bookings() {
                                 >
                                     <AlertCircle size={18} /> ดูข้อมูล
                                 </button>
+                                {!isBookingExpired(booking.end_time) && booking.status === 'booked' && (booking.user_id === user.id || isAdmin) && (
+                                    <button
+                                        onClick={() => handleEditBooking(booking)}
+                                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                        title="แก้ไขการจอง"
+                                    >
+                                        <Pencil size={20} />
+                                    </button>
+                                )}
                                 {booking.status === 'booked' && !isBookingExpired(booking.end_time) && (
                                     <div className="flex gap-2">
                                         {isAdmin && new Date() >= new Date(booking.start_time) && (
@@ -495,6 +637,291 @@ export default function Bookings() {
                 confirmText="ตกลง"
                 type="danger"
             />
+
+            {/* Success Modal */}
+            <ConfirmModal
+                isOpen={updateSuccess}
+                onClose={() => setUpdateSuccess(false)}
+                onConfirm={() => setUpdateSuccess(false)}
+                title="บันทึกข้อมูลสำเร็จ"
+                message="แก้ไขรายละเอียดการจองเรียบร้อยแล้ว"
+                confirmText="ตกลง"
+                type="success"
+            />
+
+            {/* Edit Booking Modal */}
+            {showEditModal && editingBooking && (
+                <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => !updating && setShowEditModal(false)} />
+                    <div className="relative bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200 lg:max-w-2xl">
+                        <div className="flex items-center justify-between p-6 border-b border-slate-100">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
+                                    <Pencil size={20} />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-bold text-slate-900">แก้ไขการจอง</h3>
+                                    <p className="text-sm text-slate-500">
+                                        {formatThaiDate(editingBooking.start_time, 'd MMM yyyy')} • {format(new Date(editingBooking.start_time), 'HH:mm')} - {format(new Date(editingBooking.end_time), 'HH:mm')}
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setShowEditModal(false)}
+                                disabled={updating}
+                                className="p-2 hover:bg-slate-100 rounded-full text-slate-400 disabled:opacity-50"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleUpdateBooking} className="p-6 space-y-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
+                            <div className="grid md:grid-cols-2 gap-6">
+                                <div className="md:col-span-2 space-y-2">
+                                    <label className="text-sm font-semibold text-slate-700">หัวข้อการประชุม</label>
+                                    <input
+                                        required
+                                        type="text"
+                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-primary-100 focus:border-primary-500 transition-all outline-none"
+                                        placeholder="เช่น ประชุมสรุปงานประจำสัปดาห์, ระดมสมองโปรเจกต์ใหม่"
+                                        value={editingBooking.title}
+                                        onChange={(e) => setEditingBooking({ ...editingBooking, title: e.target.value })}
+                                    />
+                                </div>
+
+                                {/* Reqeuster Info */}
+                                <div className="space-y-2">
+                                    <label className="text-sm font-semibold text-slate-700">ชื่อผู้จอง</label>
+                                    <input
+                                        required
+                                        type="text"
+                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-primary-100 focus:border-primary-500 transition-all outline-none"
+                                        value={editingBooking.requester_name}
+                                        onChange={(e) => setEditingBooking({ ...editingBooking, requester_name: e.target.value })}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-sm font-semibold text-slate-700">แผนก / เบอร์โทร</label>
+                                    <input
+                                        required
+                                        type="text"
+                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-primary-100 focus:border-primary-500 transition-all outline-none"
+                                        value={editingBooking.department}
+                                        onChange={(e) => setEditingBooking({ ...editingBooking, department: e.target.value })}
+                                    />
+                                </div>
+
+                                <div className="md:col-span-2 space-y-2">
+                                    <label className="text-sm font-semibold text-slate-700">ห้องประชุม</label>
+                                    <select
+                                        required
+                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-primary-100 focus:border-primary-500 transition-all outline-none font-bold text-slate-900"
+                                        value={editingBooking.room_id}
+                                        onChange={(e) => setEditingBooking({ ...editingBooking, room_id: e.target.value })}
+                                    >
+                                        {roomsList.map(room => (
+                                            <option key={room.id} value={room.id}>
+                                                {room.name} ({room.building} ชั้น {room.floor})
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className="md:col-span-2 space-y-2">
+                                    <label className="text-sm font-semibold text-slate-700">วันที่</label>
+                                    <input
+                                        required
+                                        type="date"
+                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-primary-100 focus:border-primary-500 transition-all outline-none"
+                                        value={editingBooking.date}
+                                        onChange={(e) => setEditingBooking({ ...editingBooking, date: e.target.value })}
+                                    />
+
+                                    {/* Visual Schedule Timeline */}
+                                    <div className="mt-4 border rounded-xl p-4 bg-white">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <p className="text-sm font-bold text-slate-700">เลือกเวลา ({editingBooking.startTime} - {editingBooking.endTime})</p>
+                                            <div className="flex gap-3 text-xs">
+                                                <div className="flex items-center gap-1"><div className="w-3 h-3 bg-white border border-slate-300 rounded"></div> ว่าง</div>
+                                                <div className="flex items-center gap-1"><div className="w-3 h-3 bg-emerald-500 rounded"></div> ที่เลือก</div>
+                                                <div className="flex items-center gap-1"><div className="w-3 h-3 bg-red-100 border border-red-500 rounded"></div> ไม่ว่าง</div>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
+                                            {Array.from({ length: 11 }).map((_, i) => {
+                                                const hour = i + 8; // Start from 8:00
+                                                const timeSlot = `${hour.toString().padStart(2, '0')}:00`;
+                                                const nextSlot = `${(hour + 1).toString().padStart(2, '0')}:00`;
+                                                const slotDate = new Date(`${editingBooking.date}T${timeSlot}`);
+
+                                                // Check if slot is booked OR in the past
+                                                // Note: isBefore checks current time. For EDITING future bookings, this guard is fine. 
+                                                // But if I edit a past booking? Probably shouldn't happen or I can't change it anyway.
+                                                const isPastSlot = isBefore(addHours(slotDate, 1), new Date());
+                                                const isBooked = occupiedSlots.some(slot => {
+                                                    const start = new Date(slot.start_time);
+                                                    const end = new Date(slot.end_time);
+                                                    return (
+                                                        (slotDate >= start && slotDate < end) ||
+                                                        (addHours(slotDate, 1) > start && addHours(slotDate, 1) <= end)
+                                                    );
+                                                });
+
+                                                const isUnavailable = isBooked || isPastSlot;
+
+                                                // Check if selected
+                                                const currentStart = parseInt(editingBooking.startTime.split(':')[0]);
+                                                const currentEnd = parseInt(editingBooking.endTime.split(':')[0]);
+                                                const isSelected = !isUnavailable && hour >= currentStart && hour < currentEnd;
+
+                                                return (
+                                                    <button
+                                                        key={hour}
+                                                        type="button"
+                                                        disabled={isUnavailable}
+                                                        onClick={() => {
+                                                            const clickedHour = hour;
+                                                            const currentStartHour = parseInt(editingBooking.startTime.split(':')[0]);
+                                                            const currentEndHour = parseInt(editingBooking.endTime.split(':')[0]);
+
+                                                            // Range Logic - Same as Rooms.jsx
+                                                            if (currentEndHour - currentStartHour === 1 && currentStartHour === clickedHour) {
+                                                                return; // Deselect prevention for single slot if needed, or allow? stick to Rooms logic
+                                                            }
+
+                                                            if (currentEndHour - currentStartHour > 1 && clickedHour >= currentStartHour && clickedHour < currentEndHour) {
+                                                                // Simplify to single slot
+                                                                setEditingBooking({
+                                                                    ...editingBooking,
+                                                                    startTime: timeSlot,
+                                                                    endTime: nextSlot
+                                                                });
+                                                                return;
+                                                            }
+
+                                                            if (clickedHour < currentStartHour) {
+                                                                setEditingBooking({ ...editingBooking, startTime: timeSlot, endTime: nextSlot });
+                                                            } else if (clickedHour > currentStartHour) {
+                                                                // Check overlap for extension
+                                                                let hasOverlap = false;
+                                                                for (let h = currentStartHour; h <= clickedHour; h++) {
+                                                                    const checkTime = `${h.toString().padStart(2, '0')}:00`;
+                                                                    const checkDate = new Date(`${editingBooking.date}T${checkTime}`);
+                                                                    if (occupiedSlots.some(s => {
+                                                                        const sStart = new Date(s.start_time);
+                                                                        const sEnd = new Date(s.end_time);
+                                                                        return (checkDate >= sStart && checkDate < sEnd);
+                                                                    })) {
+                                                                        hasOverlap = true; break;
+                                                                    }
+                                                                }
+
+                                                                if (!hasOverlap) {
+                                                                    setEditingBooking({ ...editingBooking, endTime: nextSlot });
+                                                                } else {
+                                                                    setEditingBooking({ ...editingBooking, startTime: timeSlot, endTime: nextSlot });
+                                                                }
+                                                            } else {
+                                                                setEditingBooking({ ...editingBooking, startTime: timeSlot, endTime: nextSlot });
+                                                            }
+                                                        }}
+                                                        className={`
+                                                        flex flex-col items-center justify-center py-3 px-2 rounded-xl border transition-all text-sm font-bold relative
+                                                        ${isUnavailable
+                                                                ? 'bg-red-50 border-red-200 text-red-400 cursor-not-allowed opacity-80'
+                                                                : isSelected
+                                                                    ? 'bg-emerald-500 border-emerald-600 text-white shadow-lg ring-2 ring-emerald-200'
+                                                                    : 'bg-white border-slate-200 text-slate-600 hover:border-emerald-400 hover:text-emerald-600 cursor-pointer'
+                                                            }
+                                                    `}
+                                                    >
+                                                        <span>{timeSlot} - {nextSlot}</span>
+                                                        <span className={`text-xs font-normal mt-1 ${isUnavailable ? 'text-red-300' : isSelected ? 'text-emerald-100' : 'text-slate-400'}`}>
+                                                            {isUnavailable ? (isPastSlot ? 'หมดเวลา' : 'ไม่ว่าง') : isSelected ? 'เลือกแล้ว' : 'ว่าง'}
+                                                        </span>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                        <p className="text-xs text-slate-400 mt-2 text-center">*กดช่องแรกเพื่อเริ่ม และกดช่องสุดท้ายเพื่อสิ้นสุดช่วงเวลา</p>
+                                    </div>
+                                </div>
+
+                                <div className="md:col-span-2 space-y-2">
+                                    <label className="text-sm font-semibold text-slate-700">รูปแบบการประชุม</label>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {[
+                                            { id: 'onsite', label: 'On-site', icon: Home },
+                                            { id: 'online', label: 'Online', icon: Globe }, // Globe logic requires import? No, I use Video/Laptop/Home from lucide
+                                            { id: 'hybrid', label: 'Hybrid', icon: Laptop },
+                                        ].map(type => (
+                                            <button
+                                                key={type.id}
+                                                type="button"
+                                                onClick={() => setEditingBooking({ ...editingBooking, meeting_type: type.id })}
+                                                className={cn(
+                                                    "px-3 py-4 rounded-xl border-2 transition-all flex flex-col items-center gap-1",
+                                                    editingBooking.meeting_type === type.id
+                                                        ? "bg-primary-50 border-primary-600 text-primary-700 shadow-sm"
+                                                        : "bg-white border-slate-100 text-slate-500 hover:border-slate-200"
+                                                )}
+                                            >
+                                                <type.icon size={20} />
+                                                <span className="text-xs font-bold">{type.label}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="md:col-span-2 space-y-2">
+                                    <label className="text-sm font-semibold text-slate-700">Link ประชุม (ถ้ามี)</label>
+                                    <div className="relative">
+                                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
+                                            <LinkIcon size={18} />
+                                        </div>
+                                        <input
+                                            type="url"
+                                            className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-primary-100 focus:border-primary-500 transition-all outline-none"
+                                            placeholder="Zoom, Google Meet, Teams link..."
+                                            value={editingBooking.meeting_link}
+                                            onChange={(e) => setEditingBooking({ ...editingBooking, meeting_link: e.target.value })}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="md:col-span-2 space-y-2">
+                                    <label className="text-sm font-semibold text-slate-700">รายละเอียดเพิ่มเติม</label>
+                                    <textarea
+                                        rows={3}
+                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-primary-100 focus:border-primary-500 transition-all outline-none resize-none"
+                                        placeholder="ระบุข้อกำหนดพิเศษอื่น ๆ..."
+                                        value={editingBooking.description}
+                                        onChange={(e) => setEditingBooking({ ...editingBooking, description: e.target.value })}
+                                    />
+                                </div>
+                            </div>
+                            <div className="flex gap-3 pt-4 border-t border-slate-100">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowEditModal(false)}
+                                    disabled={updating}
+                                    className="flex-1 py-3 text-slate-600 font-bold hover:bg-slate-100 rounded-xl transition-colors"
+                                >
+                                    ยกเลิก
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={updating}
+                                    className="flex-[2] py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 disabled:opacity-50 flex items-center justify-center gap-2"
+                                >
+                                    {updating ? <Loader2 size={20} className="animate-spin" /> : <><Save size={20} /> บันทึกการเปลี่ยนแปลง</>}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

@@ -19,7 +19,8 @@ import {
     Key,
     FileSpreadsheet,
     Upload,
-    FileText
+    FileText,
+    Pencil
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 
@@ -57,6 +58,11 @@ export default function AdminUsers() {
     const [deletingUser, setDeletingUser] = useState(null)
     const [deleting, setDeleting] = useState(false)
     const [selectedUsers, setSelectedUsers] = useState([])
+
+    // Edit User State
+    const [editingUser, setEditingUser] = useState(null)
+    const [showEditModal, setShowEditModal] = useState(false)
+    const [updating, setUpdating] = useState(false)
 
     // Pagination State
     const [currentPage, setCurrentPage] = useState(1)
@@ -195,6 +201,52 @@ export default function AdminUsers() {
             setError(error.message)
         } finally {
             setDeleting(false)
+        }
+    }
+
+    const handleEditUser = (user) => {
+        setEditingUser({
+            ...user,
+            // Ensure department and phone are not null for the input value
+            department: user.department || '',
+            phone: user.phone || ''
+        })
+        setShowEditModal(true)
+        setError(null)
+    }
+
+    const handleUpdateUser = async (e) => {
+        e.preventDefault()
+        setUpdating(true)
+        setError(null)
+        setSuccess(null)
+
+        try {
+            const { data, error } = await supabase
+                .from('profiles')
+                .update({
+                    full_name: editingUser.full_name,
+                    department: editingUser.department,
+                    phone: editingUser.phone,
+                    role: editingUser.role
+                })
+                .eq('id', editingUser.id)
+                .select()
+
+            if (error) throw error
+            if (!data || data.length === 0) {
+                throw new Error('บันทึกไม่สำเร็จ: คุณอาจไม่มีสิทธิ์แก้ไขรายการนี้')
+            }
+
+            setSuccess(`แก้ไขข้อมูล ${editingUser.full_name} เรียบร้อยแล้ว`)
+            setShowEditModal(false)
+            setEditingUser(null)
+            fetchUsers()
+        } catch (error) {
+            console.error('Error updating user:', error)
+            setError(error.message)
+        } finally {
+            setUpdating(false)
         }
     }
 
@@ -442,6 +494,13 @@ export default function AdminUsers() {
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex items-center justify-end gap-2">
                                                 <button
+                                                    onClick={() => handleEditUser(user)}
+                                                    className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                                                    title="แก้ไขข้อมูล"
+                                                >
+                                                    <Pencil size={18} />
+                                                </button>
+                                                <button
                                                     onClick={() => setResettingUser(user)}
                                                     className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
                                                     title="รีเซ็ตรหัสผ่าน"
@@ -618,6 +677,110 @@ export default function AdminUsers() {
                                     className="flex-1 py-3 bg-primary-600 text-white font-bold rounded-xl hover:bg-primary-700 transition-all shadow-lg shadow-primary-100 disabled:opacity-50 flex items-center justify-center gap-2"
                                 >
                                     {submitting ? <Loader2 size={18} className="animate-spin" /> : <><UserPlus size={18} /> บันทึกสมาชิก</>}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit User Modal */}
+            {showEditModal && editingUser && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => !updating && setShowEditModal(false)} />
+                    <div className="relative bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+                        <div className="flex items-center justify-between p-6 border-b border-slate-100">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600">
+                                    <Pencil size={20} />
+                                </div>
+                                <h3 className="text-xl font-bold text-slate-900">แก้ไขข้อมูลสมาชิก</h3>
+                            </div>
+                            <button
+                                onClick={() => setShowEditModal(false)}
+                                disabled={updating}
+                                className="p-2 hover:bg-slate-100 rounded-full text-slate-400 disabled:opacity-50"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleUpdateUser} className="p-6 space-y-4">
+                            {error && (
+                                <div className="p-4 bg-red-50 border border-red-100 text-red-600 rounded-xl text-sm flex items-center gap-2">
+                                    <AlertCircle size={18} /> {error}
+                                </div>
+                            )}
+
+                            <div className="space-y-1">
+                                <label className="text-sm font-semibold text-slate-700">ชื่อ-นามสกุล</label>
+                                <input
+                                    required
+                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-primary-100 focus:border-primary-500 transition-all outline-none"
+                                    placeholder="ชื่อ นามสกุล"
+                                    value={editingUser.full_name}
+                                    onChange={(e) => setEditingUser({ ...editingUser, full_name: e.target.value })}
+                                />
+                            </div>
+
+                            <div className="space-y-1">
+                                <label className="text-sm font-semibold text-slate-700">อีเมล <span className="text-xs font-normal text-slate-400">(ไม่สามารถแก้ไขได้)</span></label>
+                                <input
+                                    disabled
+                                    type="email"
+                                    className="w-full px-4 py-3 bg-slate-100 border border-slate-200 rounded-xl text-slate-500 cursor-not-allowed outline-none"
+                                    value={editingUser.email}
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <label className="text-sm font-semibold text-slate-700">แผนก</label>
+                                    <input
+                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-primary-100 focus:border-primary-500 transition-all outline-none"
+                                        placeholder="เช่น ไอที"
+                                        value={editingUser.department}
+                                        onChange={(e) => setEditingUser({ ...editingUser, department: e.target.value })}
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-sm font-semibold text-slate-700">เบอร์โทรศัพท์</label>
+                                    <input
+                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-primary-100 focus:border-primary-500 transition-all outline-none"
+                                        placeholder="08X-XXX-XXXX"
+                                        value={editingUser.phone}
+                                        onChange={(e) => setEditingUser({ ...editingUser, phone: e.target.value })}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-1">
+                                <label className="text-sm font-semibold text-slate-700">สิทธิ์พนักงาน</label>
+                                <select
+                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-primary-100 focus:border-primary-500 transition-all outline-none"
+                                    value={editingUser.role}
+                                    onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value })}
+                                >
+                                    <option value="user">User (ผู้ใช้งานทั่วไป)</option>
+                                    <option value="admin">Admin (ผู้ดูแลระบบ)</option>
+                                </select>
+                            </div>
+
+                            <div className="flex gap-3 pt-4">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowEditModal(false)}
+                                    disabled={updating}
+                                    className="flex-1 py-3 text-slate-600 font-bold hover:bg-slate-100 rounded-xl transition-colors"
+                                >
+                                    ยกเลิก
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={updating}
+                                    className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 disabled:opacity-50 flex items-center justify-center gap-2"
+                                >
+                                    {updating ? <Loader2 size={18} className="animate-spin" /> : <><Pencil size={18} /> บันทึกการแก้ไข</>}
                                 </button>
                             </div>
                         </form>

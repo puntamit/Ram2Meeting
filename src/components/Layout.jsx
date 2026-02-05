@@ -96,7 +96,7 @@ export default function Layout() {
     const menuItems = [
         { to: '/', icon: LayoutDashboard, label: 'แดชบอร์ด' },
         { to: '/rooms', icon: DoorOpen, label: 'ห้องประชุม' },
-        { to: '/bookings', icon: CalendarCheck, label: 'ประวัติการจองของฉัน' },
+        { to: '/bookings', icon: CalendarCheck, label: 'ประวัติการจองทั้งหมด' },
     ]
 
     const adminItems = [
