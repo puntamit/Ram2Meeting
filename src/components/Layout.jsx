@@ -105,7 +105,7 @@ export default function Layout() {
     const adminItems = [
         { to: '/admin/rooms', icon: SettingsIcon, label: 'จัดการห้องประชุม' },
         { to: '/admin/users', icon: Users, label: 'จัดการสมาชิก' },
-        { to: '/admin/logs', icon: History, label: 'บันทึกกิจกรรม' },
+        // { to: '/admin/logs', icon: History, label: 'บันทึกกิจกรรม' },
     ]
 
     return (
