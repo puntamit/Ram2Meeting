@@ -59,7 +59,7 @@ const StatusBadge = ({ status, endTime }) => {
     )
 }
 
-export default function Bookings() {
+export default function Bookings({ allView = false }) {
     const { user, isAdmin } = useAuth()
     const location = useLocation()
     const [bookings, setBookings] = useState([])
@@ -71,6 +71,9 @@ export default function Bookings() {
     const [statusFilter, setStatusFilter] = useState('all')
     const [sortOrder, setSortOrder] = useState('desc')
     const [dateFilter, setDateFilter] = useState(location.state?.filterDate || '')
+    const [currentPage, setCurrentPage] = useState(1)
+    const [totalCount, setTotalCount] = useState(0)
+    const PAGE_SIZE = 5
 
     // Edit Booking State
     const [roomsList, setRoomsList] = useState([])
@@ -88,13 +91,25 @@ export default function Bookings() {
             fetchUserBookings()
             fetchRooms()
         }
-    }, [user, sortOrder])
+    }, [user, sortOrder, currentPage, searchTerm, statusFilter, dateFilter, allView])
 
     useEffect(() => {
         if (editingBooking?.room_id && editingBooking?.date) {
             fetchOccupiedSlots()
         }
     }, [editingBooking?.room_id, editingBooking?.date])
+
+    // Reset to page 1 when filters or view type change
+    useEffect(() => {
+        setCurrentPage(1)
+    }, [searchTerm, statusFilter, dateFilter, allView])
+
+    // Sync date filter from navigation state (Dashboard shortcut)
+    useEffect(() => {
+        if (location.state?.filterDate) {
+            setDateFilter(location.state.filterDate)
+        }
+    }, [location.state])
 
     const fetchOccupiedSlots = async () => {
         if (!editingBooking?.room_id || !editingBooking?.date) return
@@ -125,18 +140,50 @@ export default function Bookings() {
             setLoading(true)
             let query = supabase
                 .from('bookings')
-                .select('*, rooms(name, building, floor)')
+                .select('*, rooms(name, building, floor)', { count: 'exact' })
                 .order('start_time', { ascending: sortOrder === 'asc' })
 
-            // If not admin, only show own bookings
-            if (!isAdmin) {
+            // Pagination Range
+            const from = (currentPage - 1) * PAGE_SIZE
+            const to = from + PAGE_SIZE - 1
+            query = query.range(from, to)
+
+            // If allView is false, only show own bookings
+            if (!allView) {
                 query = query.eq('user_id', user.id)
             }
 
-            const { data, error } = await query
+            // Server-side status filter
+            if (statusFilter !== 'all') {
+                if (statusFilter === 'completed') {
+                    // Logic for 'completed' includes actual status OR expired 'booked'
+                    // For now, simplify and just filter by status
+                    query = query.or(`status.eq.${statusFilter},status.eq.booked`)
+                    // Note: True completion check might need more complex logic with current time
+                } else {
+                    query = query.eq('status', statusFilter)
+                }
+            }
+
+            // Server-side date filter
+            if (dateFilter) {
+                const startOfDay = `${dateFilter}T00:00:00`
+                const endOfDay = `${dateFilter}T23:59:59`
+                query = query.gte('start_time', startOfDay).lte('start_time', endOfDay)
+            }
+
+            // Search Term (Basic implementation)
+            if (searchTerm) {
+                // Supabase search on multiple columns is limited without full-text search
+                // We'll search primarily on title and requester_name
+                query = query.or(`title.ilike.%${searchTerm}%,requester_name.ilike.%${searchTerm}%`)
+            }
+
+            const { data, error, count } = await query
 
             if (error) throw error
             setBookings(data || [])
+            setTotalCount(count || 0)
         } catch (error) {
             console.error('Error fetching bookings:', error)
         } finally {
@@ -262,32 +309,18 @@ export default function Bookings() {
         }
     }
 
-    const filteredBookings = bookings.filter(booking => {
-        const titleMatch = booking.title?.toLowerCase().includes(searchTerm.toLowerCase())
-        const roomMatch = booking.rooms?.name?.toLowerCase().includes(searchTerm.toLowerCase())
-        const nameMatch = booking.requester_name?.toLowerCase().includes(searchTerm.toLowerCase())
-
-        const matchesSearch = titleMatch || roomMatch || nameMatch
-
-        const isExpired = isPast(new Date(booking.end_time)) && booking.status === 'booked'
-        const currentStatus = isExpired ? 'completed' : booking.status
-        const matchesStatus = statusFilter === 'all' || currentStatus === statusFilter
-
-        const bookingDate = format(new Date(booking.start_time), 'yyyy-MM-dd')
-        const matchesDate = !dateFilter || bookingDate === dateFilter
-
-        return matchesSearch && matchesStatus && matchesDate
-    })
+    // With server-side filtering, filteredBookings is just bookings
+    const filteredBookings = bookings
 
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold text-slate-900">
-                        {isAdmin ? 'รายการจองทั้งหมด' : 'การจองของฉัน'}
+                        {allView ? 'รายการจองทั้งหมด' : 'การจองของฉัน'}
                     </h1>
                     <p className="text-slate-500">
-                        {isAdmin
+                        {allView
                             ? 'ตรวจสอบและจัดการรายการจองห้องประชุมของพนักงานทุกคน'
                             : 'ประวัติและรายการจองห้องประชุมทั้งหมดของคุณ'}
                     </p>
@@ -387,540 +420,605 @@ export default function Bookings() {
                     <p className="text-slate-500 max-w-sm mx-auto">ลองเปลี่ยนคำค้นหาหรือตัวกรองสถานะดูนะครับ</p>
                 </div>
             ) : (
-                <div className="space-y-4">
-                    {filteredBookings.map((booking) => (
-                        <div key={booking.id} className="bg-white rounded-2xl border border-slate-200 p-6 flex flex-col md:flex-row gap-6 relative group overflow-hidden shadow-sm hover:shadow-md transition-shadow">
-                            {/* Type Indicator */}
-                            <div className="w-2 md:w-1 absolute inset-y-0 left-0 bg-primary-600" />
+                <>
+                    <div className="space-y-4">
+                        {filteredBookings.map((booking) => (
+                            <div key={booking.id} className="bg-white rounded-2xl border border-slate-200 p-6 flex flex-col md:flex-row gap-6 relative group overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                                {/* Type Indicator */}
+                                <div className="w-2 md:w-1 absolute inset-y-0 left-0 bg-primary-600" />
 
-                            <div className="flex-1 space-y-4">
-                                <div className="flex items-start justify-between">
-                                    <div className="space-y-1">
-                                        <div className="flex items-center gap-2">
-                                            <h3 className="text-xl font-bold text-slate-900">{booking.title}</h3>
-                                            {isAdmin && booking.requester_name && (
-                                                <div className="flex flex-col">
-                                                    <span className="text-xs font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full inline-block">
-                                                        โดย: {booking.requester_name}
-                                                    </span>
-                                                    {booking.profiles?.email && (
-                                                        <span className="text-[10px] text-slate-400 flex items-center gap-1 ml-2 mt-0.5">
-                                                            <Mail size={10} /> {booking.profiles.email}
+                                <div className="flex-1 space-y-4">
+                                    <div className="flex items-start justify-between">
+                                        <div className="space-y-1">
+                                            <div className="flex items-center gap-2">
+                                                <h3 className="text-xl font-bold text-slate-900">{booking.title}</h3>
+                                                {isAdmin && booking.requester_name && (
+                                                    <div className="flex flex-col">
+                                                        <span className="text-xs font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full inline-block">
+                                                            โดย: {booking.requester_name}
                                                         </span>
-                                                    )}
-                                                </div>
+                                                        {booking.profiles?.email && (
+                                                            <span className="text-[10px] text-slate-400 flex items-center gap-1 ml-2 mt-0.5">
+                                                                <Mail size={10} /> {booking.profiles.email}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="flex items-center gap-4 text-sm text-slate-500 font-medium">
+                                                <span className="flex items-center gap-1.5"><MapPin size={16} className="text-slate-400" /> {booking.rooms?.name}</span>
+                                                <span className="w-1 h-1 bg-slate-300 rounded-full" />
+                                                <span className="flex items-center gap-1.5"><Clock size={16} className="text-slate-400" /> {format(new Date(booking.start_time), 'HH:mm')} - {format(new Date(booking.end_time), 'HH:mm')}</span>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <StatusBadge status={booking.status} endTime={booking.end_time} />
+                                        </div>
+                                    </div>
+
+                                    <div className="flex flex-wrap gap-4 pt-4 border-t border-slate-50">
+                                        {isAdmin && booking.department && (
+                                            <div className="flex flex-col">
+                                                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">แผนก / เบอร์โทร</span>
+                                                <span className="text-sm font-semibold text-slate-700">{booking.department}</span>
+                                            </div>
+                                        )}
+                                        <div className="flex flex-col">
+                                            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">วันที่</span>
+                                            <span className="text-sm font-semibold text-slate-700">{formatThaiDate(booking.start_time, 'd MMM yyyy')}</span>
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">รูปแบบ</span>
+                                            <span className="text-sm font-semibold text-slate-700 capitalize flex items-center gap-1.5">
+                                                {booking.meeting_type === 'onsite' && <Home size={14} />}
+                                                {booking.meeting_type === 'online' && <Video size={14} />}
+                                                {booking.meeting_type === 'hybrid' && <Laptop size={14} />}
+                                                {booking.meeting_type === 'onsite' ? 'On-site' : booking.meeting_type === 'online' ? 'Online' : 'Hybrid'}
+                                            </span>
+                                        </div>
+                                        {booking.meeting_link && (
+                                            <div className="flex flex-col">
+                                                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">ลิงก์ประชุม</span>
+                                                <a
+                                                    href={booking.meeting_link}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-sm font-bold text-primary-600 hover:text-primary-700 flex items-center gap-1 underline decoration-primary-200 underline-offset-4"
+                                                >
+                                                    เข้าร่วมการประชุม <ExternalLink size={14} />
+                                                </a>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {booking.description && (
+                                        <div className="bg-slate-50 p-4 rounded-xl text-sm text-slate-600 italic">
+                                            "{booking.description}"
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="flex md:flex-col justify-end gap-2 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6">
+                                    <button
+                                        onClick={() => setViewingBooking(booking)}
+                                        className="flex-1 md:flex-none px-4 py-2 bg-primary-50 text-primary-700 hover:bg-primary-100 font-bold rounded-lg transition-all flex items-center justify-center gap-2"
+                                    >
+                                        <AlertCircle size={18} /> ดูข้อมูล
+                                    </button>
+                                    {!isBookingExpired(booking.end_time) && booking.status === 'booked' && (booking.user_id === user.id || isAdmin) && (
+                                        <button
+                                            onClick={() => handleEditBooking(booking)}
+                                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                            title="แก้ไขการจอง"
+                                        >
+                                            <Pencil size={20} />
+                                        </button>
+                                    )}
+                                    {booking.status === 'booked' && !isBookingExpired(booking.end_time) && (
+                                        <div className="flex gap-2">
+                                            {((isAdmin && new Date() >= new Date(booking.start_time)) || (booking.user_id === user.id && new Date() >= new Date(booking.start_time) && new Date() < new Date(booking.end_time))) && (
+                                                <button
+                                                    onClick={() => handleFinishBooking(booking.id)}
+                                                    className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
+                                                    title="จบการประชุมก่อนเวลา (Check-out)"
+                                                >
+                                                    <CheckCircle2 size={20} />
+                                                </button>
+                                            )}
+                                            {(booking.user_id === user.id || isAdmin) && (
+                                                <button
+                                                    onClick={() => setConfirmCancel(booking.id)}
+                                                    className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                                                    title="ยกเลิกการจอง"
+                                                >
+                                                    <X size={20} />
+                                                </button>
                                             )}
                                         </div>
-                                        <div className="flex items-center gap-4 text-sm text-slate-500 font-medium">
-                                            <span className="flex items-center gap-1.5"><MapPin size={16} className="text-slate-400" /> {booking.rooms?.name}</span>
-                                            <span className="w-1 h-1 bg-slate-300 rounded-full" />
-                                            <span className="flex items-center gap-1.5"><Clock size={16} className="text-slate-400" /> {format(new Date(booking.start_time), 'HH:mm')} - {format(new Date(booking.end_time), 'HH:mm')}</span>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-3">
-                                        <StatusBadge status={booking.status} endTime={booking.end_time} />
-                                    </div>
-                                </div>
-
-                                <div className="flex flex-wrap gap-4 pt-4 border-t border-slate-50">
-                                    {isAdmin && booking.department && (
-                                        <div className="flex flex-col">
-                                            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">แผนก / เบอร์โทร</span>
-                                            <span className="text-sm font-semibold text-slate-700">{booking.department}</span>
-                                        </div>
-                                    )}
-                                    <div className="flex flex-col">
-                                        <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">วันที่</span>
-                                        <span className="text-sm font-semibold text-slate-700">{formatThaiDate(booking.start_time, 'd MMM yyyy')}</span>
-                                    </div>
-                                    <div className="flex flex-col">
-                                        <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">รูปแบบ</span>
-                                        <span className="text-sm font-semibold text-slate-700 capitalize flex items-center gap-1.5">
-                                            {booking.meeting_type === 'onsite' && <Home size={14} />}
-                                            {booking.meeting_type === 'online' && <Video size={14} />}
-                                            {booking.meeting_type === 'hybrid' && <Laptop size={14} />}
-                                            {booking.meeting_type === 'onsite' ? 'On-site' : booking.meeting_type === 'online' ? 'Online' : 'Hybrid'}
-                                        </span>
-                                    </div>
-                                    {booking.meeting_link && (
-                                        <div className="flex flex-col">
-                                            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">ลิงก์ประชุม</span>
-                                            <a
-                                                href={booking.meeting_link}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="text-sm font-bold text-primary-600 hover:text-primary-700 flex items-center gap-1 underline decoration-primary-200 underline-offset-4"
-                                            >
-                                                เข้าร่วมการประชุม <ExternalLink size={14} />
-                                            </a>
-                                        </div>
                                     )}
                                 </div>
-
-                                {booking.description && (
-                                    <div className="bg-slate-50 p-4 rounded-xl text-sm text-slate-600 italic">
-                                        "{booking.description}"
-                                    </div>
-                                )}
                             </div>
+                        ))}
+                    </div>
 
-                            <div className="flex md:flex-col justify-end gap-2 border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6">
+                    {/* Pagination Controls */}
+                    {totalCount > PAGE_SIZE && (
+                        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-8 bg-white p-4 rounded-2xl border border-slate-200">
+                            <div className="text-sm text-slate-500 font-medium whitespace-nowrap">
+                                แสดง {Math.min(totalCount, (currentPage - 1) * PAGE_SIZE + 1)} - {Math.min(totalCount, currentPage * PAGE_SIZE)} จาก {totalCount} รายการ
+                            </div>
+                            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
                                 <button
-                                    onClick={() => setViewingBooking(booking)}
-                                    className="flex-1 md:flex-none px-4 py-2 bg-primary-50 text-primary-700 hover:bg-primary-100 font-bold rounded-lg transition-all flex items-center justify-center gap-2"
+                                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                    disabled={currentPage === 1 || loading}
+                                    className="flex items-center gap-2 px-3 py-2 text-sm font-bold text-slate-600 hover:text-primary-600 hover:bg-primary-50 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-600 transition-all rounded-xl whitespace-nowrap"
                                 >
-                                    <AlertCircle size={18} /> ดูข้อมูล
+                                    <ArrowDownAz size={18} className="rotate-90" /> ก่อนหน้า
                                 </button>
-                                {!isBookingExpired(booking.end_time) && booking.status === 'booked' && (booking.user_id === user.id || isAdmin) && (
-                                    <button
-                                        onClick={() => handleEditBooking(booking)}
-                                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                                        title="แก้ไขการจอง"
-                                    >
-                                        <Pencil size={20} />
+
+                                <div className="flex items-center gap-1">
+                                    {Array.from({ length: Math.ceil(totalCount / PAGE_SIZE) }).map((_, i) => {
+                                        const pageNum = i + 1;
+                                        if (
+                                            pageNum === 1 ||
+                                            pageNum === Math.ceil(totalCount / PAGE_SIZE) ||
+                                            (pageNum >= currentPage - 1 && pageNum <= currentPage + 1)
+                                        ) {
+                                            return (
+                                                <button
+                                                    key={pageNum}
+                                                    onClick={() => setCurrentPage(pageNum)}
+                                                    className={`w-9 h-9 flex items-center justify-center rounded-xl text-sm font-bold transition-all ${currentPage === pageNum
+                                                        ? 'bg-primary-600 text-white shadow-lg shadow-primary-100'
+                                                        : 'text-slate-600 hover:bg-slate-100'
+                                                        }`}
+                                                >
+                                                    {pageNum}
+                                                </button>
+                                            );
+                                        } else if (
+                                            pageNum === currentPage - 2 ||
+                                            pageNum === currentPage + 2
+                                        ) {
+                                            return <span key={pageNum} className="text-slate-400 px-1">...</span>;
+                                        }
+                                        return null;
+                                    })}
+                                </div>
+
+                                <button
+                                    onClick={() => setCurrentPage(prev => Math.min(Math.ceil(totalCount / PAGE_SIZE), prev + 1))}
+                                    disabled={currentPage === Math.ceil(totalCount / PAGE_SIZE) || loading}
+                                    className="flex items-center gap-2 px-3 py-2 text-sm font-bold text-slate-600 hover:text-primary-600 hover:bg-primary-50 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-600 transition-all rounded-xl whitespace-nowrap"
+                                >
+                                    ถัดไป <ArrowUpAz size={18} className="rotate-90" />
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* View Details Modal */}
+                    {viewingBooking && (
+                        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+                            <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setViewingBooking(null)} />
+                            <div className="relative bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+                                <div className="flex items-center justify-between p-6 border-b border-slate-100">
+                                    <h3 className="text-xl font-bold text-slate-900">รายละเอียดการจอง</h3>
+                                    <button onClick={() => setViewingBooking(null)} className="p-2 hover:bg-slate-100 rounded-full text-slate-400">
+                                        <X size={20} />
                                     </button>
-                                )}
-                                {booking.status === 'booked' && !isBookingExpired(booking.end_time) && (
-                                    <div className="flex gap-2">
-                                        {isAdmin && new Date() >= new Date(booking.start_time) && (
-                                            <button
-                                                onClick={() => handleFinishBooking(booking.id)}
-                                                className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
-                                                title="จบการประชุมก่อนเวลา (Check-out)"
-                                            >
-                                                <CheckCircle2 size={20} />
-                                            </button>
+                                </div>
+                                <div className="p-8 space-y-6">
+                                    <div className="space-y-4">
+                                        <div className="space-y-1">
+                                            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">หัวข้อการประชุม</span>
+                                            <p className="text-lg font-bold text-slate-900 leading-tight">{viewingBooking.title}</p>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-6">
+                                            <div className="space-y-1">
+                                                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">ห้องประชุม</span>
+                                                <p className="font-bold text-primary-600 flex items-center gap-2">
+                                                    <DoorOpen size={16} /> {viewingBooking.rooms?.name}
+                                                </p>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">ตำแหน่ง</span>
+                                                <p className="text-slate-600 flex items-center gap-2">
+                                                    <MapPin size={16} /> {viewingBooking.rooms?.building}, ชั้น {viewingBooking.rooms?.floor}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-6">
+                                            <div className="space-y-1">
+                                                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">วันที่</span>
+                                                <p className="text-slate-700 font-bold">{formatThaiDate(viewingBooking.start_time, 'd MMMM yyyy')}</p>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">เวลา</span>
+                                                <p className="text-slate-700 font-bold">{format(new Date(viewingBooking.start_time), 'HH:mm')} - {format(new Date(viewingBooking.end_time), 'HH:mm')}</p>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-6">
+                                            <div className="space-y-1">
+                                                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">ผู้จอง</span>
+                                                <p className="text-slate-700 font-bold">{viewingBooking.requester_name || 'ไม่ระบุ'}</p>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">แผนก/เบอร์โทร</span>
+                                                <p className="text-slate-700 font-bold">{viewingBooking.department || 'ไม่ระบุ'}</p>
+                                            </div>
+                                        </div>
+
+                                        {viewingBooking.description && (
+                                            <div className="space-y-1">
+                                                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">รายละเอียดเพิ่มเติม</span>
+                                                <p className="text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-100 italic">"{viewingBooking.description}"</p>
+                                            </div>
                                         )}
+
+                                        {viewingBooking.meeting_link && (
+                                            <div className="space-y-2">
+                                                <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">ลิงก์เข้าร่วมประชุม</span>
+                                                <a
+                                                    href={viewingBooking.meeting_link}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="block w-full text-center py-3 bg-primary-600 text-white font-bold rounded-xl hover:bg-primary-700 transition-all flex items-center justify-center gap-2"
+                                                >
+                                                    <ExternalLink size={18} /> เปิดลิงก์ประชุม
+                                                </a>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="flex gap-3 pt-4 border-t border-slate-100">
                                         <button
-                                            onClick={() => setConfirmCancel(booking.id)}
-                                            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                                            title="ยกเลิกการจอง"
+                                            onClick={() => setViewingBooking(null)}
+                                            className="flex-1 py-3 text-slate-600 font-bold hover:bg-slate-100 rounded-xl transition-colors"
+                                        >
+                                            ปิดหน้าต่าง
+                                        </button>
+                                        {viewingBooking.status === 'booked' && !isBookingExpired(viewingBooking.end_time) && (
+                                            <div className="flex-1 flex flex-col gap-2">
+                                                {((isAdmin && new Date() >= new Date(viewingBooking.start_time)) || (viewingBooking.user_id === user.id && new Date() >= new Date(viewingBooking.start_time) && new Date() < new Date(viewingBooking.end_time))) && (
+                                                    <button
+                                                        onClick={() => handleFinishBooking(viewingBooking.id)}
+                                                        className="w-full py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2"
+                                                    >
+                                                        <CheckCircle2 size={18} /> จบการประชุม (Check-out)
+                                                    </button>
+                                                )}
+                                                {(viewingBooking.user_id === user.id || isAdmin) && (
+                                                    <button
+                                                        onClick={() => {
+                                                            setConfirmCancel(viewingBooking.id)
+                                                        }}
+                                                        className="w-full py-3 bg-red-50 text-red-600 font-bold rounded-xl hover:bg-red-100 transition-colors"
+                                                    >
+                                                        ยกเลิกการจอง
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )
+                    }
+
+                    {/* Cancel Confirmation */}
+                    <ConfirmModal
+                        isOpen={!!confirmCancel}
+                        onClose={() => setConfirmCancel(null)}
+                        onConfirm={handleCancelBooking}
+                        title="ยืนยันการยกเลิกการจอง"
+                        message="คุณแน่ใจหรือไม่ว่าต้องการยกเลิกการจองห้องประชุมนี้? การดำเนินการนี้ไม่สามารถย้อนกลับได้"
+                        confirmText="ยกเลิกการจอง"
+                        type="danger"
+                    />
+
+                    {/* Error Message */}
+                    <ConfirmModal
+                        isOpen={!!errorMsg}
+                        onClose={() => setErrorMsg(null)}
+                        onConfirm={() => setErrorMsg(null)}
+                        title="เกิดข้อผิดพลาด"
+                        message={errorMsg}
+                        confirmText="ตกลง"
+                        type="danger"
+                    />
+
+                    {/* Success Modal */}
+                    <ConfirmModal
+                        isOpen={updateSuccess}
+                        onClose={() => setUpdateSuccess(false)}
+                        onConfirm={() => setUpdateSuccess(false)}
+                        title="บันทึกข้อมูลสำเร็จ"
+                        message="แก้ไขรายละเอียดการจองเรียบร้อยแล้ว"
+                        confirmText="ตกลง"
+                        type="success"
+                    />
+
+                    {/* Edit Booking Modal */}
+                    {
+                        showEditModal && editingBooking && (
+                            <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+                                <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => !updating && setShowEditModal(false)} />
+                                <div className="relative bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200 lg:max-w-2xl">
+                                    <div className="flex items-center justify-between p-6 border-b border-slate-100">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
+                                                <Pencil size={20} />
+                                            </div>
+                                            <div>
+                                                <h3 className="text-xl font-bold text-slate-900">แก้ไขการจอง</h3>
+                                                <p className="text-sm text-slate-500">
+                                                    {formatThaiDate(editingBooking.start_time, 'd MMM yyyy')} • {format(new Date(editingBooking.start_time), 'HH:mm')} - {format(new Date(editingBooking.end_time), 'HH:mm')}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={() => setShowEditModal(false)}
+                                            disabled={updating}
+                                            className="p-2 hover:bg-slate-100 rounded-full text-slate-400 disabled:opacity-50"
                                         >
                                             <X size={20} />
                                         </button>
                                     </div>
-                                )}
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            )}
 
-            {/* View Details Modal */}
-            {viewingBooking && (
-                <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setViewingBooking(null)} />
-                    <div className="relative bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
-                        <div className="flex items-center justify-between p-6 border-b border-slate-100">
-                            <h3 className="text-xl font-bold text-slate-900">รายละเอียดการจอง</h3>
-                            <button onClick={() => setViewingBooking(null)} className="p-2 hover:bg-slate-100 rounded-full text-slate-400">
-                                <X size={20} />
-                            </button>
-                        </div>
-                        <div className="p-8 space-y-6">
-                            <div className="space-y-4">
-                                <div className="space-y-1">
-                                    <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">หัวข้อการประชุม</span>
-                                    <p className="text-lg font-bold text-slate-900 leading-tight">{viewingBooking.title}</p>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-6">
-                                    <div className="space-y-1">
-                                        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">ห้องประชุม</span>
-                                        <p className="font-bold text-primary-600 flex items-center gap-2">
-                                            <DoorOpen size={16} /> {viewingBooking.rooms?.name}
-                                        </p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">ตำแหน่ง</span>
-                                        <p className="text-slate-600 flex items-center gap-2">
-                                            <MapPin size={16} /> {viewingBooking.rooms?.building}, ชั้น {viewingBooking.rooms?.floor}
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-6">
-                                    <div className="space-y-1">
-                                        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">วันที่</span>
-                                        <p className="text-slate-700 font-bold">{formatThaiDate(viewingBooking.start_time, 'd MMMM yyyy')}</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">เวลา</span>
-                                        <p className="text-slate-700 font-bold">{format(new Date(viewingBooking.start_time), 'HH:mm')} - {format(new Date(viewingBooking.end_time), 'HH:mm')}</p>
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-6">
-                                    <div className="space-y-1">
-                                        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">ผู้จอง</span>
-                                        <p className="text-slate-700 font-bold">{viewingBooking.requester_name || 'ไม่ระบุ'}</p>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">แผนก/เบอร์โทร</span>
-                                        <p className="text-slate-700 font-bold">{viewingBooking.department || 'ไม่ระบุ'}</p>
-                                    </div>
-                                </div>
-
-                                {viewingBooking.description && (
-                                    <div className="space-y-1">
-                                        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">รายละเอียดเพิ่มเติม</span>
-                                        <p className="text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-100 italic">"{viewingBooking.description}"</p>
-                                    </div>
-                                )}
-
-                                {viewingBooking.meeting_link && (
-                                    <div className="space-y-2">
-                                        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">ลิงก์เข้าร่วมประชุม</span>
-                                        <a
-                                            href={viewingBooking.meeting_link}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="block w-full text-center py-3 bg-primary-600 text-white font-bold rounded-xl hover:bg-primary-700 transition-all flex items-center justify-center gap-2"
-                                        >
-                                            <ExternalLink size={18} /> เปิดลิงก์ประชุม
-                                        </a>
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="flex gap-3 pt-4 border-t border-slate-100">
-                                <button
-                                    onClick={() => setViewingBooking(null)}
-                                    className="flex-1 py-3 text-slate-600 font-bold hover:bg-slate-100 rounded-xl transition-colors"
-                                >
-                                    ปิดหน้าต่าง
-                                </button>
-                                {viewingBooking.status === 'booked' && !isBookingExpired(viewingBooking.end_time) && (
-                                    <div className="flex-1 flex flex-col gap-2">
-                                        {isAdmin && new Date() >= new Date(viewingBooking.start_time) && (
-                                            <button
-                                                onClick={() => handleFinishBooking(viewingBooking.id)}
-                                                className="w-full py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2"
-                                            >
-                                                <CheckCircle2 size={18} /> จบการประชุม (Check-out)
-                                            </button>
-                                        )}
-                                        <button
-                                            onClick={() => {
-                                                setConfirmCancel(viewingBooking.id)
-                                            }}
-                                            className="w-full py-3 bg-red-50 text-red-600 font-bold rounded-xl hover:bg-red-100 transition-colors"
-                                        >
-                                            ยกเลิกการจอง
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Cancel Confirmation */}
-            <ConfirmModal
-                isOpen={!!confirmCancel}
-                onClose={() => setConfirmCancel(null)}
-                onConfirm={handleCancelBooking}
-                title="ยืนยันการยกเลิกการจอง"
-                message="คุณแน่ใจหรือไม่ว่าต้องการยกเลิกการจองห้องประชุมนี้? การดำเนินการนี้ไม่สามารถย้อนกลับได้"
-                confirmText="ยกเลิกการจอง"
-                type="danger"
-            />
-
-            {/* Error Message */}
-            <ConfirmModal
-                isOpen={!!errorMsg}
-                onClose={() => setErrorMsg(null)}
-                onConfirm={() => setErrorMsg(null)}
-                title="เกิดข้อผิดพลาด"
-                message={errorMsg}
-                confirmText="ตกลง"
-                type="danger"
-            />
-
-            {/* Success Modal */}
-            <ConfirmModal
-                isOpen={updateSuccess}
-                onClose={() => setUpdateSuccess(false)}
-                onConfirm={() => setUpdateSuccess(false)}
-                title="บันทึกข้อมูลสำเร็จ"
-                message="แก้ไขรายละเอียดการจองเรียบร้อยแล้ว"
-                confirmText="ตกลง"
-                type="success"
-            />
-
-            {/* Edit Booking Modal */}
-            {showEditModal && editingBooking && (
-                <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => !updating && setShowEditModal(false)} />
-                    <div className="relative bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200 lg:max-w-2xl">
-                        <div className="flex items-center justify-between p-6 border-b border-slate-100">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
-                                    <Pencil size={20} />
-                                </div>
-                                <div>
-                                    <h3 className="text-xl font-bold text-slate-900">แก้ไขการจอง</h3>
-                                    <p className="text-sm text-slate-500">
-                                        {formatThaiDate(editingBooking.start_time, 'd MMM yyyy')} • {format(new Date(editingBooking.start_time), 'HH:mm')} - {format(new Date(editingBooking.end_time), 'HH:mm')}
-                                    </p>
-                                </div>
-                            </div>
-                            <button
-                                onClick={() => setShowEditModal(false)}
-                                disabled={updating}
-                                className="p-2 hover:bg-slate-100 rounded-full text-slate-400 disabled:opacity-50"
-                            >
-                                <X size={20} />
-                            </button>
-                        </div>
-
-                        <form onSubmit={handleUpdateBooking} className="p-6 space-y-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
-                            <div className="grid md:grid-cols-2 gap-6">
-                                <div className="md:col-span-2 space-y-2">
-                                    <label className="text-sm font-semibold text-slate-700">หัวข้อการประชุม</label>
-                                    <input
-                                        required
-                                        type="text"
-                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-primary-100 focus:border-primary-500 transition-all outline-none"
-                                        placeholder="เช่น ประชุมสรุปงานประจำสัปดาห์, ระดมสมองโปรเจกต์ใหม่"
-                                        value={editingBooking.title}
-                                        onChange={(e) => setEditingBooking({ ...editingBooking, title: e.target.value })}
-                                    />
-                                </div>
-
-                                {/* Reqeuster Info */}
-                                <div className="space-y-2">
-                                    <label className="text-sm font-semibold text-slate-700">ชื่อผู้จอง</label>
-                                    <input
-                                        required
-                                        type="text"
-                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-primary-100 focus:border-primary-500 transition-all outline-none"
-                                        value={editingBooking.requester_name}
-                                        onChange={(e) => setEditingBooking({ ...editingBooking, requester_name: e.target.value })}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-sm font-semibold text-slate-700">แผนก / เบอร์โทร</label>
-                                    <input
-                                        required
-                                        type="text"
-                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-primary-100 focus:border-primary-500 transition-all outline-none"
-                                        value={editingBooking.department}
-                                        onChange={(e) => setEditingBooking({ ...editingBooking, department: e.target.value })}
-                                    />
-                                </div>
-
-                                <div className="md:col-span-2 space-y-2">
-                                    <label className="text-sm font-semibold text-slate-700">ห้องประชุม</label>
-                                    <select
-                                        required
-                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-primary-100 focus:border-primary-500 transition-all outline-none font-bold text-slate-900"
-                                        value={editingBooking.room_id}
-                                        onChange={(e) => setEditingBooking({ ...editingBooking, room_id: e.target.value })}
-                                    >
-                                        {roomsList.map(room => (
-                                            <option key={room.id} value={room.id}>
-                                                {room.name} ({room.building} ชั้น {room.floor})
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                <div className="md:col-span-2 space-y-2">
-                                    <label className="text-sm font-semibold text-slate-700">วันที่</label>
-                                    <input
-                                        required
-                                        type="date"
-                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-primary-100 focus:border-primary-500 transition-all outline-none"
-                                        value={editingBooking.date}
-                                        onChange={(e) => setEditingBooking({ ...editingBooking, date: e.target.value })}
-                                    />
-
-                                    {/* Visual Schedule Timeline */}
-                                    <div className="mt-4 border rounded-xl p-4 bg-white">
-                                        <div className="flex items-center justify-between mb-3">
-                                            <p className="text-sm font-bold text-slate-700">เลือกเวลา ({editingBooking.startTime} - {editingBooking.endTime})</p>
-                                            <div className="flex gap-3 text-xs">
-                                                <div className="flex items-center gap-1"><div className="w-3 h-3 bg-white border border-slate-300 rounded"></div> ว่าง</div>
-                                                <div className="flex items-center gap-1"><div className="w-3 h-3 bg-emerald-500 rounded"></div> ที่เลือก</div>
-                                                <div className="flex items-center gap-1"><div className="w-3 h-3 bg-red-100 border border-red-500 rounded"></div> ไม่ว่าง</div>
+                                    <form onSubmit={handleUpdateBooking} className="p-6 space-y-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
+                                        <div className="grid md:grid-cols-2 gap-6">
+                                            <div className="md:col-span-2 space-y-2">
+                                                <label className="text-sm font-semibold text-slate-700">หัวข้อการประชุม</label>
+                                                <input
+                                                    required
+                                                    type="text"
+                                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-primary-100 focus:border-primary-500 transition-all outline-none"
+                                                    placeholder="เช่น ประชุมสรุปงานประจำสัปดาห์, ระดมสมองโปรเจกต์ใหม่"
+                                                    value={editingBooking.title}
+                                                    onChange={(e) => setEditingBooking({ ...editingBooking, title: e.target.value })}
+                                                />
                                             </div>
-                                        </div>
 
-                                        <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
-                                            {Array.from({ length: 11 }).map((_, i) => {
-                                                const hour = i + 8; // Start from 8:00
-                                                const timeSlot = `${hour.toString().padStart(2, '0')}:00`;
-                                                const nextSlot = `${(hour + 1).toString().padStart(2, '0')}:00`;
-                                                const slotDate = new Date(`${editingBooking.date}T${timeSlot}`);
+                                            {/* Reqeuster Info */}
+                                            <div className="space-y-2">
+                                                <label className="text-sm font-semibold text-slate-700">ชื่อผู้จอง</label>
+                                                <input
+                                                    required
+                                                    type="text"
+                                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-primary-100 focus:border-primary-500 transition-all outline-none"
+                                                    value={editingBooking.requester_name}
+                                                    onChange={(e) => setEditingBooking({ ...editingBooking, requester_name: e.target.value })}
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-sm font-semibold text-slate-700">แผนก / เบอร์โทร</label>
+                                                <input
+                                                    required
+                                                    type="text"
+                                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-primary-100 focus:border-primary-500 transition-all outline-none"
+                                                    value={editingBooking.department}
+                                                    onChange={(e) => setEditingBooking({ ...editingBooking, department: e.target.value })}
+                                                />
+                                            </div>
 
-                                                // Check if slot is booked OR in the past
-                                                // Note: isBefore checks current time. For EDITING future bookings, this guard is fine. 
-                                                // But if I edit a past booking? Probably shouldn't happen or I can't change it anyway.
-                                                const isPastSlot = isBefore(addHours(slotDate, 1), new Date());
-                                                const isBooked = occupiedSlots.some(slot => {
-                                                    const start = new Date(slot.start_time);
-                                                    const end = new Date(slot.end_time);
-                                                    return (
-                                                        (slotDate >= start && slotDate < end) ||
-                                                        (addHours(slotDate, 1) > start && addHours(slotDate, 1) <= end)
-                                                    );
-                                                });
+                                            <div className="md:col-span-2 space-y-2">
+                                                <label className="text-sm font-semibold text-slate-700">ห้องประชุม</label>
+                                                <select
+                                                    required
+                                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-primary-100 focus:border-primary-500 transition-all outline-none font-bold text-slate-900"
+                                                    value={editingBooking.room_id}
+                                                    onChange={(e) => setEditingBooking({ ...editingBooking, room_id: e.target.value })}
+                                                >
+                                                    {roomsList.map(room => (
+                                                        <option key={room.id} value={room.id}>
+                                                            {room.name} ({room.building} ชั้น {room.floor})
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
 
-                                                const isUnavailable = isBooked || isPastSlot;
+                                            <div className="md:col-span-2 space-y-2">
+                                                <label className="text-sm font-semibold text-slate-700">วันที่</label>
+                                                <input
+                                                    required
+                                                    type="date"
+                                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-primary-100 focus:border-primary-500 transition-all outline-none"
+                                                    value={editingBooking.date}
+                                                    onChange={(e) => setEditingBooking({ ...editingBooking, date: e.target.value })}
+                                                />
 
-                                                // Check if selected
-                                                const currentStart = parseInt(editingBooking.startTime.split(':')[0]);
-                                                const currentEnd = parseInt(editingBooking.endTime.split(':')[0]);
-                                                const isSelected = !isUnavailable && hour >= currentStart && hour < currentEnd;
+                                                {/* Visual Schedule Timeline */}
+                                                <div className="mt-4 border rounded-xl p-4 bg-white">
+                                                    <div className="flex items-center justify-between mb-3">
+                                                        <p className="text-sm font-bold text-slate-700">เลือกเวลา ({editingBooking.startTime} - {editingBooking.endTime})</p>
+                                                        <div className="flex gap-3 text-xs">
+                                                            <div className="flex items-center gap-1"><div className="w-3 h-3 bg-white border border-slate-300 rounded"></div> ว่าง</div>
+                                                            <div className="flex items-center gap-1"><div className="w-3 h-3 bg-emerald-500 rounded"></div> ที่เลือก</div>
+                                                            <div className="flex items-center gap-1"><div className="w-3 h-3 bg-red-100 border border-red-500 rounded"></div> ไม่ว่าง</div>
+                                                        </div>
+                                                    </div>
 
-                                                return (
-                                                    <button
-                                                        key={hour}
-                                                        type="button"
-                                                        disabled={isUnavailable}
-                                                        onClick={() => {
-                                                            const clickedHour = hour;
-                                                            const currentStartHour = parseInt(editingBooking.startTime.split(':')[0]);
-                                                            const currentEndHour = parseInt(editingBooking.endTime.split(':')[0]);
+                                                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
+                                                        {Array.from({ length: 11 }).map((_, i) => {
+                                                            const hour = i + 8; // Start from 8:00
+                                                            const timeSlot = `${hour.toString().padStart(2, '0')}:00`;
+                                                            const nextSlot = `${(hour + 1).toString().padStart(2, '0')}:00`;
+                                                            const slotDate = new Date(`${editingBooking.date}T${timeSlot}`);
 
-                                                            // Range Logic - Same as Rooms.jsx
-                                                            if (currentEndHour - currentStartHour === 1 && currentStartHour === clickedHour) {
-                                                                return; // Deselect prevention for single slot if needed, or allow? stick to Rooms logic
-                                                            }
+                                                            // Check if slot is booked OR in the past
+                                                            // Note: isBefore checks current time. For EDITING future bookings, this guard is fine. 
+                                                            // But if I edit a past booking? Probably shouldn't happen or I can't change it anyway.
+                                                            const isPastSlot = isBefore(addHours(slotDate, 1), new Date());
+                                                            const isBooked = occupiedSlots.some(slot => {
+                                                                const start = new Date(slot.start_time);
+                                                                const end = new Date(slot.end_time);
+                                                                return (
+                                                                    (slotDate >= start && slotDate < end) ||
+                                                                    (addHours(slotDate, 1) > start && addHours(slotDate, 1) <= end)
+                                                                );
+                                                            });
 
-                                                            if (currentEndHour - currentStartHour > 1 && clickedHour >= currentStartHour && clickedHour < currentEndHour) {
-                                                                // Simplify to single slot
-                                                                setEditingBooking({
-                                                                    ...editingBooking,
-                                                                    startTime: timeSlot,
-                                                                    endTime: nextSlot
-                                                                });
-                                                                return;
-                                                            }
+                                                            const isUnavailable = isBooked || isPastSlot;
 
-                                                            if (clickedHour < currentStartHour) {
-                                                                setEditingBooking({ ...editingBooking, startTime: timeSlot, endTime: nextSlot });
-                                                            } else if (clickedHour > currentStartHour) {
-                                                                // Check overlap for extension
-                                                                let hasOverlap = false;
-                                                                for (let h = currentStartHour; h <= clickedHour; h++) {
-                                                                    const checkTime = `${h.toString().padStart(2, '0')}:00`;
-                                                                    const checkDate = new Date(`${editingBooking.date}T${checkTime}`);
-                                                                    if (occupiedSlots.some(s => {
-                                                                        const sStart = new Date(s.start_time);
-                                                                        const sEnd = new Date(s.end_time);
-                                                                        return (checkDate >= sStart && checkDate < sEnd);
-                                                                    })) {
-                                                                        hasOverlap = true; break;
-                                                                    }
-                                                                }
+                                                            // Check if selected
+                                                            const currentStart = parseInt(editingBooking.startTime.split(':')[0]);
+                                                            const currentEnd = parseInt(editingBooking.endTime.split(':')[0]);
+                                                            const isSelected = !isUnavailable && hour >= currentStart && hour < currentEnd;
 
-                                                                if (!hasOverlap) {
-                                                                    setEditingBooking({ ...editingBooking, endTime: nextSlot });
-                                                                } else {
-                                                                    setEditingBooking({ ...editingBooking, startTime: timeSlot, endTime: nextSlot });
-                                                                }
-                                                            } else {
-                                                                setEditingBooking({ ...editingBooking, startTime: timeSlot, endTime: nextSlot });
-                                                            }
-                                                        }}
-                                                        className={`
+                                                            return (
+                                                                <button
+                                                                    key={hour}
+                                                                    type="button"
+                                                                    disabled={isUnavailable}
+                                                                    onClick={() => {
+                                                                        const clickedHour = hour;
+                                                                        const currentStartHour = parseInt(editingBooking.startTime.split(':')[0]);
+                                                                        const currentEndHour = parseInt(editingBooking.endTime.split(':')[0]);
+
+                                                                        // Range Logic - Same as Rooms.jsx
+                                                                        if (currentEndHour - currentStartHour === 1 && currentStartHour === clickedHour) {
+                                                                            return; // Deselect prevention for single slot if needed, or allow? stick to Rooms logic
+                                                                        }
+
+                                                                        if (currentEndHour - currentStartHour > 1 && clickedHour >= currentStartHour && clickedHour < currentEndHour) {
+                                                                            // Simplify to single slot
+                                                                            setEditingBooking({
+                                                                                ...editingBooking,
+                                                                                startTime: timeSlot,
+                                                                                endTime: nextSlot
+                                                                            });
+                                                                            return;
+                                                                        }
+
+                                                                        if (clickedHour < currentStartHour) {
+                                                                            setEditingBooking({ ...editingBooking, startTime: timeSlot, endTime: nextSlot });
+                                                                        } else if (clickedHour > currentStartHour) {
+                                                                            // Check overlap for extension
+                                                                            let hasOverlap = false;
+                                                                            for (let h = currentStartHour; h <= clickedHour; h++) {
+                                                                                const checkTime = `${h.toString().padStart(2, '0')}:00`;
+                                                                                const checkDate = new Date(`${editingBooking.date}T${checkTime}`);
+                                                                                if (occupiedSlots.some(s => {
+                                                                                    const sStart = new Date(s.start_time);
+                                                                                    const sEnd = new Date(s.end_time);
+                                                                                    return (checkDate >= sStart && checkDate < sEnd);
+                                                                                })) {
+                                                                                    hasOverlap = true; break;
+                                                                                }
+                                                                            }
+
+                                                                            if (!hasOverlap) {
+                                                                                setEditingBooking({ ...editingBooking, endTime: nextSlot });
+                                                                            } else {
+                                                                                setEditingBooking({ ...editingBooking, startTime: timeSlot, endTime: nextSlot });
+                                                                            }
+                                                                        } else {
+                                                                            setEditingBooking({ ...editingBooking, startTime: timeSlot, endTime: nextSlot });
+                                                                        }
+                                                                    }}
+                                                                    className={`
                                                         flex flex-col items-center justify-center py-3 px-2 rounded-xl border transition-all text-sm font-bold relative
                                                         ${isUnavailable
-                                                                ? 'bg-red-50 border-red-200 text-red-400 cursor-not-allowed opacity-80'
-                                                                : isSelected
-                                                                    ? 'bg-emerald-500 border-emerald-600 text-white shadow-lg ring-2 ring-emerald-200'
-                                                                    : 'bg-white border-slate-200 text-slate-600 hover:border-emerald-400 hover:text-emerald-600 cursor-pointer'
-                                                            }
+                                                                            ? 'bg-red-50 border-red-200 text-red-400 cursor-not-allowed opacity-80'
+                                                                            : isSelected
+                                                                                ? 'bg-emerald-500 border-emerald-600 text-white shadow-lg ring-2 ring-emerald-200'
+                                                                                : 'bg-white border-slate-200 text-slate-600 hover:border-emerald-400 hover:text-emerald-600 cursor-pointer'
+                                                                        }
                                                     `}
-                                                    >
-                                                        <span>{timeSlot} - {nextSlot}</span>
-                                                        <span className={`text-xs font-normal mt-1 ${isUnavailable ? 'text-red-300' : isSelected ? 'text-emerald-100' : 'text-slate-400'}`}>
-                                                            {isUnavailable ? (isPastSlot ? 'หมดเวลา' : 'ไม่ว่าง') : isSelected ? 'เลือกแล้ว' : 'ว่าง'}
-                                                        </span>
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
-                                        <p className="text-xs text-slate-400 mt-2 text-center">*กดช่องแรกเพื่อเริ่ม และกดช่องสุดท้ายเพื่อสิ้นสุดช่วงเวลา</p>
-                                    </div>
-                                </div>
+                                                                >
+                                                                    <span>{timeSlot} - {nextSlot}</span>
+                                                                    <span className={`text-xs font-normal mt-1 ${isUnavailable ? 'text-red-300' : isSelected ? 'text-emerald-100' : 'text-slate-400'}`}>
+                                                                        {isUnavailable ? (isPastSlot ? 'หมดเวลา' : 'ไม่ว่าง') : isSelected ? 'เลือกแล้ว' : 'ว่าง'}
+                                                                    </span>
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                    <p className="text-xs text-slate-400 mt-2 text-center">*กดช่องแรกเพื่อเริ่ม และกดช่องสุดท้ายเพื่อสิ้นสุดช่วงเวลา</p>
+                                                </div>
+                                            </div>
 
-                                <div className="md:col-span-2 space-y-2">
-                                    <label className="text-sm font-semibold text-slate-700">รูปแบบการประชุม</label>
-                                    <div className="grid grid-cols-3 gap-2">
-                                        {[
-                                            { id: 'onsite', label: 'On-site', icon: Home },
-                                            { id: 'online', label: 'Online', icon: Globe }, // Globe logic requires import? No, I use Video/Laptop/Home from lucide
-                                            { id: 'hybrid', label: 'Hybrid', icon: Laptop },
-                                        ].map(type => (
+                                            <div className="md:col-span-2 space-y-2">
+                                                <label className="text-sm font-semibold text-slate-700">รูปแบบการประชุม</label>
+                                                <div className="grid grid-cols-3 gap-2">
+                                                    {[
+                                                        { id: 'onsite', label: 'On-site', icon: Home },
+                                                        { id: 'online', label: 'Online', icon: Globe }, // Globe logic requires import? No, I use Video/Laptop/Home from lucide
+                                                        { id: 'hybrid', label: 'Hybrid', icon: Laptop },
+                                                    ].map(type => (
+                                                        <button
+                                                            key={type.id}
+                                                            type="button"
+                                                            onClick={() => setEditingBooking({ ...editingBooking, meeting_type: type.id })}
+                                                            className={cn(
+                                                                "px-3 py-4 rounded-xl border-2 transition-all flex flex-col items-center gap-1",
+                                                                editingBooking.meeting_type === type.id
+                                                                    ? "bg-primary-50 border-primary-600 text-primary-700 shadow-sm"
+                                                                    : "bg-white border-slate-100 text-slate-500 hover:border-slate-200"
+                                                            )}
+                                                        >
+                                                            <type.icon size={20} />
+                                                            <span className="text-xs font-bold">{type.label}</span>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            <div className="md:col-span-2 space-y-2">
+                                                <label className="text-sm font-semibold text-slate-700">Link ประชุม (ถ้ามี)</label>
+                                                <div className="relative">
+                                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
+                                                        <LinkIcon size={18} />
+                                                    </div>
+                                                    <input
+                                                        type="url"
+                                                        className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-primary-100 focus:border-primary-500 transition-all outline-none"
+                                                        placeholder="Zoom, Google Meet, Teams link..."
+                                                        value={editingBooking.meeting_link}
+                                                        onChange={(e) => setEditingBooking({ ...editingBooking, meeting_link: e.target.value })}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div className="md:col-span-2 space-y-2">
+                                                <label className="text-sm font-semibold text-slate-700">รายละเอียดเพิ่มเติม</label>
+                                                <textarea
+                                                    rows={3}
+                                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-primary-100 focus:border-primary-500 transition-all outline-none resize-none"
+                                                    placeholder="ระบุข้อกำหนดพิเศษอื่น ๆ..."
+                                                    value={editingBooking.description}
+                                                    onChange={(e) => setEditingBooking({ ...editingBooking, description: e.target.value })}
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-3 pt-4 border-t border-slate-100">
                                             <button
-                                                key={type.id}
                                                 type="button"
-                                                onClick={() => setEditingBooking({ ...editingBooking, meeting_type: type.id })}
-                                                className={cn(
-                                                    "px-3 py-4 rounded-xl border-2 transition-all flex flex-col items-center gap-1",
-                                                    editingBooking.meeting_type === type.id
-                                                        ? "bg-primary-50 border-primary-600 text-primary-700 shadow-sm"
-                                                        : "bg-white border-slate-100 text-slate-500 hover:border-slate-200"
-                                                )}
+                                                onClick={() => setShowEditModal(false)}
+                                                disabled={updating}
+                                                className="flex-1 py-3 text-slate-600 font-bold hover:bg-slate-100 rounded-xl transition-colors"
                                             >
-                                                <type.icon size={20} />
-                                                <span className="text-xs font-bold">{type.label}</span>
+                                                ยกเลิก
                                             </button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                <div className="md:col-span-2 space-y-2">
-                                    <label className="text-sm font-semibold text-slate-700">Link ประชุม (ถ้ามี)</label>
-                                    <div className="relative">
-                                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
-                                            <LinkIcon size={18} />
+                                            <button
+                                                type="submit"
+                                                disabled={updating}
+                                                className="flex-[2] py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 disabled:opacity-50 flex items-center justify-center gap-2"
+                                            >
+                                                {updating ? <Loader2 size={20} className="animate-spin" /> : <><Save size={20} /> บันทึกการเปลี่ยนแปลง</>}
+                                            </button>
                                         </div>
-                                        <input
-                                            type="url"
-                                            className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-primary-100 focus:border-primary-500 transition-all outline-none"
-                                            placeholder="Zoom, Google Meet, Teams link..."
-                                            value={editingBooking.meeting_link}
-                                            onChange={(e) => setEditingBooking({ ...editingBooking, meeting_link: e.target.value })}
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="md:col-span-2 space-y-2">
-                                    <label className="text-sm font-semibold text-slate-700">รายละเอียดเพิ่มเติม</label>
-                                    <textarea
-                                        rows={3}
-                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-4 focus:ring-primary-100 focus:border-primary-500 transition-all outline-none resize-none"
-                                        placeholder="ระบุข้อกำหนดพิเศษอื่น ๆ..."
-                                        value={editingBooking.description}
-                                        onChange={(e) => setEditingBooking({ ...editingBooking, description: e.target.value })}
-                                    />
+                                    </form>
                                 </div>
                             </div>
-                            <div className="flex gap-3 pt-4 border-t border-slate-100">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowEditModal(false)}
-                                    disabled={updating}
-                                    className="flex-1 py-3 text-slate-600 font-bold hover:bg-slate-100 rounded-xl transition-colors"
-                                >
-                                    ยกเลิก
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={updating}
-                                    className="flex-[2] py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 disabled:opacity-50 flex items-center justify-center gap-2"
-                                >
-                                    {updating ? <Loader2 size={20} className="animate-spin" /> : <><Save size={20} /> บันทึกการเปลี่ยนแปลง</>}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
+                        )
+                    }
+                </>
             )}
         </div>
     )

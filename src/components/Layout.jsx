@@ -12,7 +12,8 @@ import {
     ChevronRight,
     Users,
     Key,
-    ShieldAlert
+    ShieldAlert,
+    History
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { clsx } from 'clsx'
@@ -96,12 +97,15 @@ export default function Layout() {
     const menuItems = [
         { to: '/', icon: LayoutDashboard, label: 'แดชบอร์ด' },
         { to: '/rooms', icon: DoorOpen, label: 'ห้องประชุม' },
-        { to: '/bookings', icon: CalendarCheck, label: 'ประวัติการจองทั้งหมด' },
+        { to: '/bookings', icon: CalendarCheck, label: 'การจองของฉัน' },
     ]
+
+    const allBookingsItem = { to: '/all-bookings', icon: CalendarCheck, label: 'รายการจองทั้งหมด' }
 
     const adminItems = [
         { to: '/admin/rooms', icon: SettingsIcon, label: 'จัดการห้องประชุม' },
         { to: '/admin/users', icon: Users, label: 'จัดการสมาชิก' },
+        { to: '/admin/logs', icon: History, label: 'บันทึกกิจกรรม' },
     ]
 
     return (
@@ -143,6 +147,11 @@ export default function Layout() {
                                     active={location.pathname === item.to}
                                 />
                             ))}
+                            <NavItem
+                                key={allBookingsItem.to}
+                                {...allBookingsItem}
+                                active={location.pathname === allBookingsItem.to}
+                            />
                         </div>
 
                         {isAdmin && (
@@ -195,7 +204,8 @@ export default function Layout() {
                         <h2 className="text-lg font-semibold text-slate-900">
                             {location.pathname === '/' && 'ยินดีต้อนรับกลับมา!'}
                             {location.pathname === '/rooms' && 'ห้องประชุมที่ว่าง'}
-                            {location.pathname === '/bookings' && 'กำหนดการประชุมของคุณ'}
+                            {location.pathname === '/bookings' && 'รายการจองของฉัน'}
+                            {location.pathname === '/all-bookings' && 'รายการจองทั้งหมด'}
                             {location.pathname.startsWith('/admin') && 'ส่วนผู้ดูแลระบบ'}
                         </h2>
                     </div>

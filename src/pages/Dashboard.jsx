@@ -141,7 +141,7 @@ export default function Dashboard() {
                 <div className="lg:col-span-2 space-y-4">
                     <div className="flex items-center justify-between">
                         <h3 className="text-xl font-bold text-slate-900">รายการประชุมวันนี้</h3>
-                        <Link to="/bookings" className="text-sm font-semibold text-primary-600 hover:text-primary-700">ดูทั้งหมด</Link>
+                        <Link to="/all-bookings" className="text-sm font-semibold text-primary-600 hover:text-primary-700">ดูทั้งหมด</Link>
                     </div>
 
                     <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">

@@ -8,6 +8,7 @@ import Rooms from './pages/Rooms'
 import Bookings from './pages/Bookings'
 import AdminRooms from './pages/AdminRooms'
 import AdminUsers from './pages/AdminUsers'
+import AdminLogs from './pages/AdminLogs'
 import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 
@@ -38,10 +39,12 @@ function App() {
                         <Route index element={<Dashboard />} />
                         <Route path="rooms" element={<Rooms />} />
                         <Route path="bookings" element={<Bookings />} />
+                        <Route path="all-bookings" element={<Bookings allView={true} />} />
 
                         {/* Admin Routes */}
                         <Route path="admin/rooms" element={<ProtectedRoute adminOnly><AdminRooms /></ProtectedRoute>} />
                         <Route path="admin/users" element={<ProtectedRoute adminOnly><AdminUsers /></ProtectedRoute>} />
+                        <Route path="admin/logs" element={<ProtectedRoute adminOnly><AdminLogs /></ProtectedRoute>} />
                     </Route>
                 </Routes>
             </AuthProvider>
