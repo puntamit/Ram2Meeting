@@ -129,7 +129,7 @@ export default function ForgotPassword() {
                                 <Loader2 size={20} className="animate-spin" />
                             ) : (
                                 <>
-                                    ส่งคู่มือรีเซ็ตรหัสผ่าน
+                                    รีเซ็ตรหัสผ่าน
                                     <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
                                 </>
                             )}
